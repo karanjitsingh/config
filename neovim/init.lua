@@ -18,7 +18,7 @@ vim.opt.smartcase = true
 vim.wo.relativenumber = true
 
 -- Add command to insert UUID
-vim.api.nvim_create_user_command('uuid', function()
+vim.api.nvim_create_user_command('UUID', function()
     local uuid = vim.fn.system('uuidgen'):gsub('\n', ''):lower()
     vim.api.nvim_put({uuid}, '', false, true)
 end, {})
