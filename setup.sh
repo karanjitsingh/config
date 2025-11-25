@@ -2,40 +2,37 @@
 
 set -e
 
+# Function to copy config with confirmation
+copy_config() {
+    local source=$1
+    local target=$2
+    local name=$3
+    
+    if [ -f "$target" ] || [ -L "$target" ]; then
+        read -p "$target already exists. Overwrite? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            ln -sf "$source" "$target"
+            echo "✓ $name configuration linked"
+        else
+            echo "⊘ Skipped $name configuration"
+        fi
+    else
+        ln -sf "$source" "$target"
+        echo "✓ $name configuration linked"
+    fi
+}
+
 echo "Setting up dotfiles..."
 
 # Neovim setup
 echo "Setting up Neovim..."
 mkdir -p ~/.config/nvim
-if [ -f ~/.config/nvim/init.lua ] || [ -L ~/.config/nvim/init.lua ]; then
-    read -p "~/.config/nvim/init.lua already exists. Overwrite? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ln -sf "$(pwd)/neovim/init.lua" ~/.config/nvim/init.lua
-        echo "✓ Neovim configuration linked"
-    else
-        echo "⊘ Skipped Neovim configuration"
-    fi
-else
-    ln -sf "$(pwd)/neovim/init.lua" ~/.config/nvim/init.lua
-    echo "✓ Neovim configuration linked"
-fi
+copy_config "$(pwd)/neovim/init.lua" ~/.config/nvim/init.lua "Neovim"
 
 # tmux setup
 echo "Setting up tmux..."
-if [ -f ~/.tmux.conf ] || [ -L ~/.tmux.conf ]; then
-    read -p "~/.tmux.conf already exists. Overwrite? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ln -sf "$(pwd)/tmux/.tmux.conf" ~/.tmux.conf
-        echo "✓ tmux configuration linked"
-    else
-        echo "⊘ Skipped tmux configuration"
-    fi
-else
-    ln -sf "$(pwd)/tmux/.tmux.conf" ~/.tmux.conf
-    echo "✓ tmux configuration linked"
-fi
+copy_config "$(pwd)/tmux/.tmux.conf" ~/.tmux.conf "tmux"
 
 # Reload tmux if running
 if command -v tmux &> /dev/null && tmux info &> /dev/null; then
@@ -47,19 +44,7 @@ fi
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "Setting up Karabiner..."
     mkdir -p ~/.config/karabiner
-    if [ -f ~/.config/karabiner/karabiner.json ] || [ -L ~/.config/karabiner/karabiner.json ]; then
-        read -p "~/.config/karabiner/karabiner.json already exists. Overwrite? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            ln -sf "$(pwd)/karabiner/karabiner.json" ~/.config/karabiner/karabiner.json
-            echo "✓ Karabiner configuration linked"
-        else
-            echo "⊘ Skipped Karabiner configuration"
-        fi
-    else
-        ln -sf "$(pwd)/karabiner/karabiner.json" ~/.config/karabiner/karabiner.json
-        echo "✓ Karabiner configuration linked"
-    fi
+    copy_config "$(pwd)/karabiner/karabiner.json" ~/.config/karabiner/karabiner.json "Karabiner"
 fi
 
 echo ""
