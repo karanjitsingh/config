@@ -43,5 +43,24 @@ if command -v tmux &> /dev/null && tmux info &> /dev/null; then
     echo "✓ tmux configuration reloaded"
 fi
 
+# Karabiner setup (macOS only)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "Setting up Karabiner..."
+    mkdir -p ~/.config/karabiner
+    if [ -f ~/.config/karabiner/karabiner.json ] || [ -L ~/.config/karabiner/karabiner.json ]; then
+        read -p "~/.config/karabiner/karabiner.json already exists. Overwrite? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            ln -sf "$(pwd)/karabiner/karabiner.json" ~/.config/karabiner/karabiner.json
+            echo "✓ Karabiner configuration linked"
+        else
+            echo "⊘ Skipped Karabiner configuration"
+        fi
+    else
+        ln -sf "$(pwd)/karabiner/karabiner.json" ~/.config/karabiner/karabiner.json
+        echo "✓ Karabiner configuration linked"
+    fi
+fi
+
 echo ""
 echo "Setup complete! 🎉"

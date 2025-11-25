@@ -6,6 +6,7 @@ Personal configuration files for consistent development environments across syst
 
 - **neovim/** - Neovim configuration
 - **tmux/** - tmux configuration
+- **karabiner/** - Karabiner-Elements keyboard customization
 
 ## Installation
 
@@ -29,4 +30,11 @@ ln -sf $(pwd)/neovim/init.lua ~/.config/nvim/init.lua
 ```bash
 ln -sf $(pwd)/tmux/.tmux.conf ~/.tmux.conf
 tmux source ~/.tmux.conf  # reload if tmux is running
+```
+
+### Karabiner
+
+```bash
+mkdir -p ~/.config/karabiner
+ln -sf $(pwd)/karabiner/karabiner.json ~/.config/karabiner/karabiner.json
 ```
