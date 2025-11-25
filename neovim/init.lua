@@ -1,0 +1,35 @@
+-- Check if Neovim is running in VSCode (optional, for VSCode extension)
+if vim.g.vscode then
+    -- VSCode extension setup (if any)
+else
+    -- Ordinary Neovim setup
+end
+
+-- Use system clipboard
+vim.opt.clipboard = "unnamedplus"
+
+-- Enable case-insensitive search
+vim.opt.ignorecase = true
+
+-- Enable smart case (case-sensitive only when search contains uppercase)
+vim.opt.smartcase = true
+
+-- Enable relative line numbers
+vim.wo.relativenumber = true
+
+-- Add command to insert UUID
+vim.api.nvim_create_user_command('uuid', function()
+    local uuid = vim.fn.system('uuidgen'):gsub('\n', ''):lower()
+    vim.api.nvim_put({uuid}, '', false, true)
+end, {})
+
+-- Shift + { } while ignoring whitespace
+vim.keymap.set('n', '}', function()
+  vim.fn.search('^\\s*$', 'W')
+--   vim.cmd('normal! $')
+end, { noremap = true, silent = true })
+
+vim.keymap.set('n', '{', function()
+  vim.fn.search('^\\s*$', 'bW')
+--   vim.cmd('normal! $')
+end, { noremap = true, silent = true })
