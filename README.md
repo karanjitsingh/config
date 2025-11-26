@@ -1,6 +1,6 @@
 # Dotfiles
 
-Personal configuration files for consistent development environments across systems.
+Personal configuration files for consistent development environments across (Linux/Unix) systems.
 
 ## Contents
 
