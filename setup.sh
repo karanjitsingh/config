@@ -21,9 +21,11 @@ copy_config() {
         ln -sf "$source" "$target"
         echo "✓ $name configuration linked"
     fi
+    echo ""
 }
 
 echo "Setting up dotfiles..."
+echo ""
 
 # Neovim setup
 echo "Setting up Neovim..."
