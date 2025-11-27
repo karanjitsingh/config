@@ -66,129 +66,6 @@
                         ]
                     },
                     {
-                        "description": "Escape as Layer for All App Launches and Escape when tapped",
-                        "enabled": false,
-                        "manipulators": [
-                            {
-                                "from": { "key_code": "escape" },
-                                "to": [
-                                    {
-                                        "set_variable": {
-                                            "name": "app_launcher_layer",
-                                            "value": 1
-                                        }
-                                    },
-                                    { "key_code": "escape" }
-                                ],
-                                "to_after_key_up": [
-                                    {
-                                        "set_variable": {
-                                            "name": "app_launcher_layer",
-                                            "value": 0
-                                        }
-                                    }
-                                ],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "1" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Arc.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "2" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Visual Studio Code.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "3" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Slack.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "4" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/iTerm.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "5" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Spotify.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "q" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Microsoft Outlook.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "w" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Obsidian.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "name": "app_launcher_layer",
-                                        "type": "variable_if",
-                                        "value": 1
-                                    }
-                                ],
-                                "from": { "key_code": "e" },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Quip.app" } } }],
-                                "type": "basic"
-                            }
-                        ]
-                    },
-                    {
                         "description": "Open Apps by left option + num",
                         "manipulators": [
                             {
@@ -204,7 +81,7 @@
                                     "key_code": "2",
                                     "modifiers": { "mandatory": ["left_option"] }
                                 },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Visual Studio Code.app" } } }],
+                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Cursor.app" } } }],
                                 "type": "basic"
                             },
                             {
@@ -212,7 +89,7 @@
                                     "key_code": "4",
                                     "modifiers": { "mandatory": ["left_option"] }
                                 },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Slack.app" } } }],
+                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/WhatsApp.app" } } }],
                                 "type": "basic"
                             },
                             {
@@ -236,7 +113,7 @@
                                     "key_code": "q",
                                     "modifiers": { "mandatory": ["left_option"] }
                                 },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Microsoft Outlook.app" } } }],
+                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Signal.app" } } }],
                                 "type": "basic"
                             },
                             {
@@ -246,23 +123,8 @@
                                 },
                                 "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Obsidian.app" } } }],
                                 "type": "basic"
-                            },
-                            {
-                                "from": {
-                                    "key_code": "e",
-                                    "modifiers": { "mandatory": ["left_option"] }
-                                },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Quip.app" } } }],
-                                "type": "basic"
-                            },
-                            {
-                                "from": {
-                                    "key_code": "k",
-                                    "modifiers": { "mandatory": ["left_option"] }
-                                },
-                                "to": [{ "software_function": { "open_application": { "file_path": "/Applications/Kiro.app" } } }],
-                                "type": "basic"
                             }
+                            
                         ]
                     },
                     {
