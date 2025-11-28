@@ -1,0 +1,27 @@
+#!/bin/zsh
+
+export PATH=$PATH:~/scripts
+export PATH=$PATH:/usr/local/scripts
+
+alias beast=~/scripts/beast/beast
+typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
+beast no-suspend start -q
+
+
+# venv shortcut
+function venv() {
+    local dir=$(pwd)
+    while [[ "$dir" != "/" ]]; do
+        if [[ -d "$dir/venv" ]]; then
+            echo "Found venv in $dir"
+            source "$dir/venv/bin/activate"
+            return
+        elif [[ -d "$dir/.venv" ]]; then
+            echo "Found .venv in $dir"
+            source "$dir/.venv/bin/activate"
+            return
+        fi
+        dir=$(dirname "$dir")
+    done
+    echo "No virtual environment (venv or .venv) found in parent directories."
+}

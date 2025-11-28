@@ -1,0 +1,63 @@
+#!/bin/bash
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+INHIBIT_PID_FILE="$SCRIPT_DIR/.no-suspend.pid"
+
+QUIET=0
+
+# Must have exactly one command (start/stop)
+if [[ "$1" != "start" && "$1" != "stop" ]]; then
+    echo "Usage: $(basename "$0") [start|stop] [--quiet|-q]"
+    exit 1
+fi
+
+COMMAND="$1"
+shift   # remove the command from $@
+
+# Now only --quiet / -q is allowed (and only once)
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -q|--quiet)
+            QUIET=1
+            shift
+            ;;
+        *)
+            echo "Error: unknown option: $1"
+            echo "Usage: $(basename "$0") [start|stop] [--quiet|-q]"
+            exit 1
+            ;;
+    esac
+done
+
+log() {
+    (( QUIET == 0 )) && echo "$@"
+}
+
+case "$COMMAND" in
+    start)
+        if [ -f "$INHIBIT_PID_FILE" ]; then
+            log "Suspend is already blocked."
+            exit 0
+        fi
+
+        log "Blocking suspend..."
+        systemd-inhibit --what=sleep:idle --who="$USER" --why="Blocked by no-suspend" sleep infinity &
+        PID=$!
+        echo $PID > "$INHIBIT_PID_FILE"
+        log "Done. Suspend is now blocked. (PID: $PID)"
+        ;;
+
+    stop)
+        if [ -f "$INHIBIT_PID_FILE" ]; then
+            log "Restoring suspend..."
+            INHIBIT_PID=$(cat "$INHIBIT_PID_FILE")
+            kill "$INHIBIT_PID" 2>/dev/null
+            rm -f "$INHIBIT_PID_FILE"
+            wait "$INHIBIT_PID" 2>/dev/null || true
+            log "Done. Suspend is now enabled."
+        else
+            (( QUIET == 0 )) && echo "Suspend was not blocked with this script."
+            exit 1
+        fi
+        ;;
+esac

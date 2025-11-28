@@ -1,0 +1,14 @@
+#!/bin/zsh
+
+# A wrapper for systemd-inhibit to prevent sleep while a command is running.
+
+if [[ -z "$*" ]]; then
+    echo "Usage: nosleep [command] [arguments...]"
+    exit 1
+fi
+
+echo "Running command with sleep inhibited: $*"
+systemd-inhibit --who="nosleep" --why="$@" --what=idle:sleep --mode=block "$@"
+
+echo "Command finished. Sleep inhibition released."
+

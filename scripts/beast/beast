@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Get the directory of the beast script
+script_dir=$(dirname "$(realpath "$0")")
+
+# Get the subcommand (first argument)
+subcommand="$1"
+
+# If no subcommand provided, list all subcommands
+if [ -z "$subcommand" ]; then
+    echo "Available subcommands:"
+    for file in "$script_dir"/*; do
+        if [ -f "$file" ] && [ -x "$file" ] && [ "$(basename "$file")" != "beast" ]; then
+            echo "- $(basename "$file")"
+        fi
+    done
+    exit 0
+fi
+
+# Check if subcommand is "beast"
+if [ "$subcommand" = "beast" ]; then
+    echo "Error: Running 'beast beast' is not allowed to prevent recursion."
+    exit 1
+fi
+
+# Shift arguments to pass the rest to the sub-script
+shift
+
+# Check if the sub-script exists
+subscript="$script_dir/$subcommand"
+if [ ! -f "$subscript" ] || [ ! -x "$subscript" ]; then
+    echo "Error: Script '$subcommand' not found or not executable in $script_dir."
+    exit 1
+fi
+
+# Run the sub-script with remaining arguments
+"$subscript" "$@"
