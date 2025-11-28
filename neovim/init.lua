@@ -33,3 +33,9 @@ vim.keymap.set('n', '{', function()
   vim.fn.search('^\\s*$', 'bW')
 --   vim.cmd('normal! $')
 end, { noremap = true, silent = true })
+
+-- Print epoch timestamp in milliseconds for command NOW
+vim.api.nvim_create_user_command('NOW', function()
+    local now = vim.fn.localtime() * 1000
+    vim.api.nvim_put({tostring(now)}, '', false, true)
+end, {})
