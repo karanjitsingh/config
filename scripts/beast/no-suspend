@@ -6,8 +6,8 @@ INHIBIT_PID_FILE="$SCRIPT_DIR/.no-suspend.pid"
 QUIET=0
 
 # Must have exactly one command (start/stop)
-if [[ "$1" != "start" && "$1" != "stop" ]]; then
-    echo "Usage: $(basename "$0") [start|stop] [--quiet|-q]"
+if [[ "$1" != "start" && "$1" != "stop" && "$1" != "status" ]]; then
+    echo "Usage: $(basename "$0") [start|stop|status] [--quiet|-q]"
     exit 1
 fi
 
@@ -36,8 +36,28 @@ log() {
 case "$COMMAND" in
     start)
         if [ -f "$INHIBIT_PID_FILE" ]; then
-            log "Suspend is already blocked."
-            exit 0
+            INHIBIT_PID=$(cat "$INHIBIT_PID_FILE" 2>/dev/null)
+            if [ -n "$INHIBIT_PID" ]; then
+                # Check if process exists AND matches expected command
+                if kill -0 "$INHIBIT_PID" 2>/dev/null; then
+                    # Verify it's actually our sleep infinity process
+                    CMD=$(ps -p "$INHIBIT_PID" -o cmd= 2>/dev/null | tr -d '\n')
+                    if [[ "$CMD" == *"sleep infinity"* ]] || [[ "$CMD" == *"systemd-inhibit"* ]]; then
+                        log "Suspend is already blocked. (PID: $INHIBIT_PID)"
+                        exit 0
+                    else
+                        # PID exists but wrong process - stale PID file
+                        log "Warning: PID $INHIBIT_PID exists but is not our inhibit process. Cleaning up..."
+                        rm -f "$INHIBIT_PID_FILE"
+                    fi
+                else
+                    # Process doesn't exist - stale PID file
+                    rm -f "$INHIBIT_PID_FILE"
+                fi
+            else
+                # Empty or invalid PID file
+                rm -f "$INHIBIT_PID_FILE"
+            fi
         fi
 
         log "Blocking suspend..."
@@ -60,4 +80,20 @@ case "$COMMAND" in
             exit 1
         fi
         ;;
+
+    status)
+        if [ -f "$INHIBIT_PID_FILE" ]; then
+            INHIBIT_PID=$(cat "$INHIBIT_PID_FILE")
+            if kill -0 "$INHIBIT_PID" 2>/dev/null; then
+                log "Suspend is blocked. (PID: $INHIBIT_PID)"
+                log ""
+            else
+                log "Suspend is not blocked."
+                log ""
+            fi
+        else
+            log "Suspend is not blocked."
+            log ""
+        fi
+        systemd-inhibit --list --no-pager
 esac
