@@ -72,6 +72,15 @@
             ]
           },
           {
+            "description": "Alt + d - Discord",
+            "manipulators": [
+              {
+                "from": { "key_code": "d", "modifiers": { "mandatory": [ "left_option" ] } },
+                "to": [ { "software_function": { "open_application": { "file_path": "/Applications/Discord.app" } } } ],
+                "type": "basic"
+              }
+            ]
+          },{
             "description": "Alt + s - Slack",
             "manipulators": [
               {
