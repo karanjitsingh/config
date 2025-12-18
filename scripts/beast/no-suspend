@@ -1,42 +1,89 @@
 #!/bin/bash
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-INHIBIT_PID_FILE="$SCRIPT_DIR/.no-suspend.pid"
+# Will be updated after parsing --user option
+INHIBIT_PID_FILE=""
 
 QUIET=0
+TARGET_USER=""
+STOP_ALL=0
 
 # Must have exactly one command (start/stop)
 if [[ "$1" != "start" && "$1" != "stop" && "$1" != "status" ]]; then
-    echo "Usage: $(basename "$0") [start|stop|status] [--quiet|-q]"
+    echo "Usage: $(basename "$0") [start|stop|status] [--quiet|-q] [--user <user>] [--all]"
     exit 1
 fi
 
 COMMAND="$1"
 shift   # remove the command from $@
 
-# Now only --quiet / -q is allowed (and only once)
+# Parse options
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -q|--quiet)
             QUIET=1
             shift
             ;;
+        --user)
+            TARGET_USER="$2"
+            shift 2
+            ;;
+        --all)
+            STOP_ALL=1
+            shift
+            ;;
         *)
             echo "Error: unknown option: $1"
-            echo "Usage: $(basename "$0") [start|stop] [--quiet|-q]"
+            echo "Usage: $(basename "$0") [start|stop|status] [--quiet|-q] [--user <user>] [--all]"
             exit 1
             ;;
     esac
 done
 
+# Override SCRIPT_DIR if --user is specified
+if [[ -n "$TARGET_USER" ]]; then
+    SCRIPT_DIR="/home/$TARGET_USER/scripts/beast"
+    if ! sudo test -d "$SCRIPT_DIR"; then
+        echo "Error: Directory not found for user '$TARGET_USER': $SCRIPT_DIR"
+        exit 1
+    fi
+fi
+
+# Set PID file path after SCRIPT_DIR is finalized
+INHIBIT_PID_FILE="$SCRIPT_DIR/.no-suspend.pid"
+
 log() {
-    (( QUIET == 0 )) && echo "$@"
+    (( QUIET == 0 )) && echo -e "$@"
+}
+
+# Helper to run commands with sudo when TARGET_USER is set
+run_cmd() {
+    if [[ -n "$TARGET_USER" ]]; then
+        sudo "$@"
+    else
+        "$@"
+    fi
 }
 
 case "$COMMAND" in
     start)
-        if [ -f "$INHIBIT_PID_FILE" ]; then
-            INHIBIT_PID=$(cat "$INHIBIT_PID_FILE" 2>/dev/null)
+        # Handle --all: run for all users in /home
+        if [[ $STOP_ALL -eq 1 ]]; then
+            log "Starting no-suspend for all users..."
+            for user in $(sudo ls /home); do
+                log "\nRunning no-suspend start for user: $user"
+                if [[ $QUIET -eq 1 ]]; then
+                    bash "$0" start --user "$user" --quiet || true
+                else
+                    bash "$0" start --user "$user" || true
+                fi
+            done
+            exit 0
+        fi
+
+        # Default: start for current user
+        if run_cmd test -f "$INHIBIT_PID_FILE"; then
+            INHIBIT_PID=$(run_cmd cat "$INHIBIT_PID_FILE" 2>/dev/null)
             if [ -n "$INHIBIT_PID" ]; then
                 # Check if process exists AND matches expected command
                 if kill -0 "$INHIBIT_PID" 2>/dev/null; then
@@ -48,42 +95,67 @@ case "$COMMAND" in
                     else
                         # PID exists but wrong process - stale PID file
                         log "Warning: PID $INHIBIT_PID exists but is not our inhibit process. Cleaning up..."
-                        rm -f "$INHIBIT_PID_FILE"
+                        run_cmd rm -f "$INHIBIT_PID_FILE"
                     fi
                 else
                     # Process doesn't exist - stale PID file
-                    rm -f "$INHIBIT_PID_FILE"
+                    run_cmd rm -f "$INHIBIT_PID_FILE"
                 fi
             else
                 # Empty or invalid PID file
-                rm -f "$INHIBIT_PID_FILE"
+                run_cmd rm -f "$INHIBIT_PID_FILE"
             fi
         fi
 
         log "Blocking suspend..."
-        systemd-inhibit --what=sleep:idle --who="$USER" --why="Blocked by no-suspend" sleep infinity &
+        INHIBIT_USER="${TARGET_USER:-$USER}"
+        systemd-inhibit --what=sleep:idle --who="$INHIBIT_USER" --why="Blocked by no-suspend" sleep infinity &
         PID=$!
-        echo $PID > "$INHIBIT_PID_FILE"
-        log "Done. Suspend is now blocked. (PID: $PID)"
+        if run_cmd sh -c "echo $PID > '$INHIBIT_PID_FILE'"; then
+            log "Done. Suspend is now blocked. (PID: $PID)"
+        else
+            echo "Error: Failed to write PID file"
+            kill "$PID" 2>/dev/null
+            exit 1
+        fi
         ;;
 
     stop)
-        if [ -f "$INHIBIT_PID_FILE" ]; then
+        # Handle --all: run for all users in /home
+        if [[ $STOP_ALL -eq 1 ]]; then
+            log "Stopping no-suspend for all users..."
+            for user in $(sudo ls /home); do
+                log "\nRunning no-suspend stop for user: $user"
+                if [[ $QUIET -eq 1 ]]; then
+                    bash "$0" stop --user "$user" --quiet || true
+                else
+                    bash "$0" stop --user "$user" || true
+                fi
+            done
+            exit 0
+        fi
+
+        # Default: stop for current user (or --user if specified)
+        if run_cmd test -f "$INHIBIT_PID_FILE"; then
             log "Restoring suspend..."
-            INHIBIT_PID=$(cat "$INHIBIT_PID_FILE")
-            kill "$INHIBIT_PID" 2>/dev/null
-            rm -f "$INHIBIT_PID_FILE"
-            wait "$INHIBIT_PID" 2>/dev/null || true
-            log "Done. Suspend is now enabled."
+            INHIBIT_PID=$(run_cmd cat "$INHIBIT_PID_FILE")
+            if run_cmd rm -f "$INHIBIT_PID_FILE"; then
+                kill "$INHIBIT_PID" 2>/dev/null
+                wait "$INHIBIT_PID" 2>/dev/null || true
+                log "Done. Suspend is now enabled."
+            else
+                echo "Error: Failed to remove PID file"
+                exit 1
+            fi
         else
-            (( QUIET == 0 )) && echo "Suspend was not blocked with this script."
+            log "Suspend was not blocked with this script."
             exit 1
         fi
         ;;
 
     status)
-        if [ -f "$INHIBIT_PID_FILE" ]; then
-            INHIBIT_PID=$(cat "$INHIBIT_PID_FILE")
+        if run_cmd test -f "$INHIBIT_PID_FILE"; then
+            INHIBIT_PID=$(run_cmd cat "$INHIBIT_PID_FILE")
             if kill -0 "$INHIBIT_PID" 2>/dev/null; then
                 log "Suspend is blocked. (PID: $INHIBIT_PID)"
                 log ""

@@ -1,4 +1,4 @@
 #!/bin/zsh
 
-~/scripts/beast/no-suspend stop
+~/scripts/beast/no-suspend stop --all
 sudo systemctl suspend 
