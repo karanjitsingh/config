@@ -39,3 +39,11 @@ vim.api.nvim_create_user_command('NOW', function()
     local now = vim.fn.localtime() * 1000
     vim.api.nvim_put({tostring(now)}, '', false, true)
 end, {})
+
+-- Disable auto adding comments on new line
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "*",
+  callback = function()
+    vim.opt_local.formatoptions:remove({ "o" })
+  end,
+})
