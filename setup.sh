@@ -35,6 +35,21 @@ setup_tmux() {
     echo "Setting up tmux..."
     copy_config "$(pwd)/tmux/.tmux.conf" ~/.tmux.conf "tmux"
 
+    # Install TPM if not present
+    if [ ! -d ~/.tmux/plugins/tpm ]; then
+        echo "Installing TPM..."
+        git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+        echo "✓ TPM installed"
+    fi
+
+    # Install plugins directly
+    for plugin in tmux-resurrect tmux-continuum; do
+        if [ ! -d ~/.tmux/plugins/$plugin ]; then
+            git clone https://github.com/tmux-plugins/$plugin ~/.tmux/plugins/$plugin
+            echo "✓ $plugin installed"
+        fi
+    done
+
     # Reload tmux if running
     if command -v tmux &> /dev/null && tmux info &> /dev/null; then
         tmux source ~/.tmux.conf
