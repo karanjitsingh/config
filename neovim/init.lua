@@ -84,10 +84,25 @@ vim.keymap.set("v", "S", function()
     -- Check if first and last characters are the same or valid pairs
     if #text >= 2 and (first == last or pairs[first] == last) then
         local inner = text:sub(2, -2)
-        vim.fn.setreg('z', inner, vim.fn.getregtype('z'))
-        
-        -- Delete selection (without clobbering unnamed register) and paste inner text, then reselect it
-        vim.cmd('normal! gv"_d"zP`[v`]')
+
+        -- Use byte-precise replacement via the visual marks
+        local spos = vim.fn.getpos("'<")
+        local epos = vim.fn.getpos("'>")
+        local buf = vim.api.nvim_get_current_buf()
+        local row = spos[2] - 1  -- 0-indexed
+        local start_col = math.min(spos[3], epos[3]) - 1  -- 0-indexed
+        local end_col = math.max(spos[3], epos[3])        -- 0-indexed exclusive
+
+        local ok = pcall(vim.api.nvim_buf_set_text, buf, row, start_col, row, end_col, { inner })
+        if not ok then
+            -- Fallback: use register-based replacement
+            vim.fn.setreg('z', inner, vim.fn.getregtype('z'))
+            vim.cmd('normal! gv"_d"zP`[v`]')
+        elseif #inner > 0 then
+            vim.fn.cursor(spos[2], start_col + 1)
+            vim.cmd("normal! v")
+            vim.fn.cursor(spos[2], start_col + vim.fn.strlen(inner))
+        end
     else
         -- If no valid delimiters found, just restore visual selection
         vim.cmd('normal! gv')
