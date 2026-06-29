@@ -46,7 +46,7 @@
             "manipulators": [
               {
                 "from": { "key_code": "a", "modifiers": { "mandatory": [ "left_option" ] } },
-                "to": [ { "software_function": { "open_application": { "file_path": "/Applications/Antigravity.app" } } } ],
+                "to": [ { "software_function": { "open_application": { "file_path": "/Applications/Antigravity IDE.app" } } } ],
                 "type": "basic"
               }
             ]
