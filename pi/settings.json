@@ -1,0 +1,18 @@
+{
+  "lastChangelogVersion": "0.80.3",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-6",
+  "defaultThinkingLevel": "medium",
+  "packages": [
+    "npm:context-mode",
+    "npm:@pi-unipi/notify",
+    "npm:pi-subagents",
+    "npm:pi-web-access",
+    "npm:pi-context-prune",
+    "https://github.com/vndv/pi-codegraph"
+  ],
+  "theme": "dark",
+  "terminal": {
+    "showTerminalProgress": true
+  }
+}

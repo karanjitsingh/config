@@ -1,0 +1,37 @@
+{
+  "defaultPlatforms": ["native"],
+  "events": {
+    "workflow_end": { "enabled": true, "platforms": [] },
+    "ralph_loop_end": { "enabled": true, "platforms": [] },
+    "mcp_server_error": { "enabled": true, "platforms": [] },
+    "agent_end": { "enabled": false, "platforms": [] },
+    "memory_consolidated": { "enabled": false, "platforms": [] },
+    "session_shutdown": { "enabled": false, "platforms": [] },
+    "ask_user_prompt": { "enabled": false, "platforms": [] }
+  },
+  "native": {
+    "enabled": true,
+    "suppressWhenFocused": false
+  },
+  "gotify": {
+    "enabled": false,
+    "serverUrl": "https://YOUR_GOTIFY_SERVER",
+    "appToken": "YOUR_GOTIFY_APP_TOKEN",
+    "priority": 5
+  },
+  "telegram": {
+    "enabled": false,
+    "botToken": "YOUR_TELEGRAM_BOT_TOKEN",
+    "chatId": "YOUR_TELEGRAM_CHAT_ID"
+  },
+  "ntfy": {
+    "enabled": false,
+    "serverUrl": "https://ntfy.sh",
+    "topic": "YOUR_NTFY_TOPIC",
+    "priority": 3
+  },
+  "recap": {
+    "enabled": false,
+    "model": "openrouter/openai/gpt-oss-20b"
+  }
+}

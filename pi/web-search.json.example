@@ -1,0 +1,9 @@
+{
+  "provider": "auto",
+  "braveApiKey": "YOUR_BRAVE_API_KEY_HERE",
+  "exaApiKey": "YOUR_EXA_API_KEY_HERE",
+  "geminiApiKey": "YOUR_GEMINI_API_KEY_HERE",
+  "openaiApiKey": "YOUR_OPENAI_API_KEY_HERE",
+  "tavilyApiKey": "YOUR_TAVILY_API_KEY_HERE",
+  "perplexityApiKey": "YOUR_PERPLEXITY_API_KEY_HERE"
+}

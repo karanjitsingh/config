@@ -1,0 +1,4 @@
+# Never commit real credentials
+auth.json
+web-search.json
+notify-config.json
