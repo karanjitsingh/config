@@ -2,6 +2,17 @@
 
 Personal configuration files for consistent development environments across (Linux/Unix) systems.
 
+## ⚙️ Pi Coding Agent
+
+**Your pi configuration lives in `~/code/config/pi/` and is the source of truth.**
+
+All pi settings, themes, extensions, and skills are:
+- **Defined in:** `~/code/config/pi/`
+- **Symlinked to:** `~/.pi/agent/` (live symlinks via `setup.sh`)
+- **Git-tracked:** Changes should be committed to this repo
+
+**See [`PI_SETUP.md`](./PI_SETUP.md) for complete documentation and troubleshooting.**
+
 ## Contents
 
 - **neovim/** - Neovim configuration

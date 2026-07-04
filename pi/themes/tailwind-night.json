@@ -1,0 +1,99 @@
+{
+  "$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+  "name": "tailwind-night",
+
+  "vars": {
+    "violet":      "#c4b5fd",
+    "violetSoft":  "#ddd6fe",
+    "violetMuted": "#7c6cac",
+
+    "sky":         "#7dd3fc",
+    "skyMuted":    "#3b6b8a",
+
+    "mint":        "#6ee7b7",
+    "rose":        "#fda4af",
+    "amber":       "#fde68a",
+    "lilac":       "#f0abfc",
+
+    "slate300":    "#cbd5e1",
+    "slate400":    "#94a3b8",
+    "slate500":    "#64748b",
+    "slate600":    "#3e4a5c",
+
+    "bgCard":      "#0c0c14",
+    "bgUserMsg":   "#0d0b18",
+    "bgSelected":  "#16112a",
+    "bgTool":      "#0a0a0f",
+    "bgToolOk":    "#080f0d",
+    "bgToolErr":   "#100a0d"
+  },
+
+  "colors": {
+    "accent":            "violet",
+    "border":            "violetMuted",
+    "borderAccent":      "violetSoft",
+    "borderMuted":       "slate600",
+
+    "success":           "mint",
+    "error":             "rose",
+    "warning":           "amber",
+
+    "muted":             "slate400",
+    "dim":               "slate500",
+    "text":              "",
+    "thinkingText":      "slate400",
+
+    "selectedBg":        "bgSelected",
+    "userMessageBg":     "bgUserMsg",
+    "userMessageText":   "",
+    "customMessageBg":   "bgCard",
+    "customMessageText": "",
+    "customMessageLabel":"violetSoft",
+
+    "toolPendingBg":     "bgTool",
+    "toolSuccessBg":     "bgToolOk",
+    "toolErrorBg":       "bgToolErr",
+    "toolTitle":         "violetSoft",
+    "toolOutput":        "",
+
+    "mdHeading":         "amber",
+    "mdLink":            "sky",
+    "mdLinkUrl":         "skyMuted",
+    "mdCode":            "sky",
+    "mdCodeBlock":       "",
+    "mdCodeBlockBorder": "slate600",
+    "mdQuote":           "slate400",
+    "mdQuoteBorder":     "violetMuted",
+    "mdHr":              "slate600",
+    "mdListBullet":      "violet",
+
+    "toolDiffAdded":     "mint",
+    "toolDiffRemoved":   "rose",
+    "toolDiffContext":   "slate500",
+
+    "syntaxComment":     "slate500",
+    "syntaxKeyword":     "lilac",
+    "syntaxFunction":    "violetSoft",
+    "syntaxVariable":    "sky",
+    "syntaxString":      "mint",
+    "syntaxNumber":      "amber",
+    "syntaxType":        "sky",
+    "syntaxOperator":    "violet",
+    "syntaxPunctuation": "slate400",
+
+    "thinkingOff":       "slate600",
+    "thinkingMinimal":   "violetMuted",
+    "thinkingLow":       "violet",
+    "thinkingMedium":    "sky",
+    "thinkingHigh":      "lilac",
+    "thinkingXhigh":     "rose",
+
+    "bashMode":          "amber"
+  },
+
+  "export": {
+    "pageBg":  "#07070f",
+    "cardBg":  "#0d0d18",
+    "infoBg":  "#16112a"
+  }
+}

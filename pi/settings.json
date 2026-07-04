@@ -1,8 +1,4 @@
 {
-  "lastChangelogVersion": "0.80.3",
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-6",
-  "defaultThinkingLevel": "medium",
   "packages": [
     "npm:context-mode",
     "npm:@pi-unipi/notify",
@@ -11,10 +7,12 @@
     "npm:pi-context-prune",
     "https://github.com/vndv/pi-codegraph",
     "npm:pi-intercom",
-    "npm:pi-prompt-template-model"
+    "npm:pi-prompt-template-model",
+    "npm:@hypabolic/pi-hypa",
+    "npm:@ayulab/pi-rewind"
   ],
-  "theme": "dark",
-  "terminal": {
-    "showTerminalProgress": true
-  }
+  "lastChangelogVersion": "0.80.3",
+  "theme": "tailwind-night",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-6"
 }
