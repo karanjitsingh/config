@@ -9,7 +9,9 @@
     "npm:pi-subagents",
     "npm:pi-web-access",
     "npm:pi-context-prune",
-    "https://github.com/vndv/pi-codegraph"
+    "https://github.com/vndv/pi-codegraph",
+    "npm:pi-intercom",
+    "npm:pi-prompt-template-model"
   ],
   "theme": "dark",
   "terminal": {
