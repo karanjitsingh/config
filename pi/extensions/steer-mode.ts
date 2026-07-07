@@ -86,7 +86,7 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Shortcuts ─────────────────────────────────────────────────────────────
 
-	pi.registerShortcut(Key.ctrl(" "), {
+	pi.registerShortcut(Key.ctrl("space"), {
 		description: "Toggle steer / queue send mode",
 		handler: async (ctx) => toggleMode(ctx),
 	});
