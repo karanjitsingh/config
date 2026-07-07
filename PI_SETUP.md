@@ -37,6 +37,38 @@ See `pi/settings.json` for the full list. Key packages:
 - **@hypabolic/pi-hypa** — Compression for large outputs
 - Plus theme, notification, and intercom support
 
+## CodeGraph Autodetection & Setup
+
+CodeGraph should automatically detect your project root when pi is launched from within a project directory.
+
+**How it works:**
+- A `.zshrc` function automatically finds the nearest git root
+- Pi is launched from that project root
+- CodeGraph MCP server detects the project and indexes it
+
+**To use:** Just run `pi` from anywhere in a git project — it will automatically cd to the root.
+
+**Initial setup per project:**
+```bash
+cd /path/to/your/project
+codegraph init  # Creates .codegraph/ with local index
+```
+
+### What to commit
+
+✅ **DO commit:** `.codegraph/.gitignore` (explains what CodeGraph generates)  
+❌ **DON'T commit:** `.codegraph/codegraph.db*`, `.codegraph/cache/`, `.codegraph/*.log`
+
+CodeGraph is like `node_modules/` or `build/` — generated, local, regenerated with `codegraph init`. Add to your project's `.gitignore`:
+
+```gitignore
+# CodeGraph (local index, regenerate with `codegraph init`)
+.codegraph/codegraph.db*
+.codegraph/cache/
+.codegraph/*.log
+.codegraph/.dirty
+```
+
 ## Troubleshooting
 
 ### "hypa: command not found"
@@ -44,6 +76,13 @@ See `pi/settings.json` for the full list. Key packages:
 If bash commands fail with this error:
 1. Ensure hypa is installed: `npm list -g @hypabolic/pi-hypa`
 2. Use context-mode sandbox tools instead: `ctx_execute`, `ctx_execute_file`
+
+### CodeGraph autodetection not working
+
+1. Verify you're in a git repo: `git status`
+2. Ensure CodeGraph is initialized: `codegraph init`
+3. Verify the .zshrc function exists: `which pi` should show a function, not just the binary
+4. Manually specify project path if needed: `codegraph_files(projectPath: "/path/to/project")`
 
 ### Symlink broken
 

@@ -6,7 +6,7 @@
  * /q       — open queue in nvim / vim / nano for editing
  * /q clear — clear pending queue
  *
- * Steer:  Enter interrupts the agent and redirects it immediately.
+ * Ctrl+Space — toggle between ⚡ steer and 📥 queue modes
  *         Sent steers are shown in the widget while the agent is running.
  * Queue:  Enter adds to an internal list shown in a widget above the editor.
  *         Messages are sent after the agent finishes (not on abort).
@@ -86,7 +86,7 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Shortcuts ─────────────────────────────────────────────────────────────
 
-	pi.registerShortcut(Key.ctrl("s"), {
+	pi.registerShortcut(Key.ctrl(" "), {
 		description: "Toggle steer / queue send mode",
 		handler: async (ctx) => toggleMode(ctx),
 	});
