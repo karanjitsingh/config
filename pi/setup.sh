@@ -21,13 +21,23 @@ fi
 echo "✓ Node.js v$(node --version | tr -d v) detected"
 echo ""
 
-# --- npm global prefix (~/.npm-global) ---
-npm config set prefix "$HOME/.npm-global"
-mkdir -p "$HOME/.npm-global/bin"
-echo "✓ npm global prefix set to ~/.npm-global"
-if [[ ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
-    echo "⚠  ~/.npm-global/bin is not in your PATH."
-    echo '   Add to your ~/.zshrc or ~/.bashrc: export PATH="$HOME/.npm-global/bin:$PATH"'
+# --- npm global prefix ---
+# NOTE: a `prefix` entry in ~/.npmrc is incompatible with nvm (nvm manages the
+# prefix per Node version). Only force ~/.npm-global when NOT running under nvm.
+if [[ -n "$NVM_DIR" && "$(command -v node)" == "$NVM_DIR"/* ]]; then
+	echo "ℹ  nvm detected (node under $NVM_DIR) — leaving npm prefix untouched to avoid nvm conflict."
+	if grep -qsE '^(globalconfig|prefix)\b' "$HOME/.npmrc" 2>/dev/null; then
+		echo "⚠  ~/.npmrc has a prefix/globalconfig setting that will break nvm. Run:"
+		echo "     nvm use --delete-prefix $(node -v) --silent"
+	fi
+else
+	npm config set prefix "$HOME/.npm-global"
+	mkdir -p "$HOME/.npm-global/bin"
+	echo "✓ npm global prefix set to ~/.npm-global"
+	if [[ ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
+		echo "⚠  ~/.npm-global/bin is not in your PATH."
+		echo '   Add to your ~/.zshrc or ~/.bashrc: export PATH="$HOME/.npm-global/bin:$PATH"'
+	fi
 fi
 echo ""
 
