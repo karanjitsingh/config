@@ -1,16 +1,17 @@
 /**
  * Steer Mode Extension
  *
- * Ctrl+S   — toggle between ⚡ steer and 📥 queue modes
+ * Ctrl+Space — toggle between ⚡ steer and 📥 queue modes
  * /qs      — toggle steer / queue mode
  * /q       — open queue in nvim / vim / nano for editing
  * /q clear — clear pending queue
  *
- * Ctrl+Space — toggle between ⚡ steer and 📥 queue modes
- *         Sent steers are shown in the widget while the agent is running.
+ * Steer: Enter sends the message immediately as a real-time interrupt. Sent
+ *         steers appear in the widget as a read-only log (they cannot be
+ *         deleted — they were already delivered).
  * Queue:  Enter adds to an internal list shown in a widget above the editor.
  *         Messages are sent after the agent finishes (not on abort).
- *         /q opens nvim to freely edit / reorder / delete items.
+ *         /q opens nvim to freely edit / reorder / delete queue items.
  *
  * When the agent is idle, messages send normally regardless of mode.
  */
@@ -82,6 +83,32 @@ export default function (pi: ExtensionAPI) {
 				: "📥 Queue — Enter adds to queue (sent after agent finishes)",
 			"info",
 		);
+	}
+
+	// Send queued messages to the agent. The delivery mode depends on whether the
+	// agent is currently streaming, because a bare sendUserMessage() throws
+	// "Agent is already processing" while the agent is mid-run (notably inside an
+	// agent_end handler, where isStreaming is still true until finishRun() runs).
+	function drain(ctx: ExtensionContext): void {
+		if (pendingQueue.length === 0) return;
+
+		if (ctx.isIdle()) {
+			// Agent is idle: send the first message to start a fresh turn, and keep
+			// the rest in pendingQueue — they'll be queued as followUp at the next
+			// agent_end (which runs while streaming, see the else branch).
+			const first = pendingQueue.shift()!;
+			updateUI(ctx);
+			pi.sendUserMessage(first);
+			return;
+		}
+
+		// Agent is streaming (e.g. inside agent_end): queue everything as followUp.
+		// The agent's post-run continuation (agent.continue()) drains them in order.
+		const items = pendingQueue.splice(0);
+		updateUI(ctx);
+		for (const msg of items) {
+			pi.sendUserMessage(msg, { deliverAs: "followUp" });
+		}
 	}
 
 	// ── Shortcuts ─────────────────────────────────────────────────────────────
@@ -159,11 +186,11 @@ export default function (pi: ExtensionAPI) {
 						.filter((chunk) => chunk.length > 0);
 				}
 
-				const updatedSteers = parseSection("── Steers");
+				// Steers are read-only: they were already delivered as real-time interrupts
+				// the moment Enter was pressed, so edits/deletions in the editor cannot
+				// un-send them. Only the Queue section is parsed back.
 				const updated = parseSection("── Queue");
 
-				activeSteers.length = 0;
-				activeSteers.push(...updatedSteers);
 				pendingQueue.length = 0;
 				pendingQueue.push(...updated);
 				updateUI(ctx);
@@ -176,17 +203,11 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify("Could not read queue file", "warning");
 			}
 
-			// Agent finished while we were editing — drain now.
+			// Agent finished while we were editing — drain now. drain() checks
+			// ctx.isIdle() and picks a safe delivery mode (the agent is idle here).
 			if (drainPending) {
 				drainPending = false;
-				if (pendingQueue.length > 0) {
-					const [first, ...rest] = pendingQueue.splice(0);
-					updateUI(ctx);
-					pi.sendUserMessage(first!);
-					for (const msg of rest) {
-						pi.sendUserMessage(msg, { deliverAs: "followUp" });
-					}
-				}
+				drain(ctx);
 			}
 		},
 	});
@@ -259,12 +280,9 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		// Drain: send first message normally (triggers a new turn), rest as followUps.
-		const [first, ...rest] = pendingQueue.splice(0);
-		updateUI(ctx);
-		pi.sendUserMessage(first!);
-		for (const msg of rest) {
-			pi.sendUserMessage(msg, { deliverAs: "followUp" });
-		}
+		// Drain: route through drain(), which queues as followUp since the agent is
+		// still streaming at agent_end (a bare sendUserMessage would throw
+		// "Agent is already processing"). The post-run continuation drains them.
+		drain(ctx);
 	});
 }
