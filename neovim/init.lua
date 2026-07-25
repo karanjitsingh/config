@@ -5,6 +5,10 @@ else
     -- Ordinary Neovim setup
 end
 
+-- Set leader key to Space
+vim.g.mapleader = " "
+vim.g.maplocalleader = " "
+
 -- Use system clipboard
 vim.opt.clipboard = "unnamedplus"
 
@@ -111,3 +115,68 @@ vim.keymap.set("v", "S", function()
     -- Restore register z
     vim.fn.setreg('z', z_reg, z_type)
 end, { noremap = true, desc = "Remove surrounding characters" })
+
+
+
+
+-- GIT  integrations
+
+-- Bootstrap lazy.nvim
+local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+if not (vim.uv or vim.loop).fs_stat(lazypath) then
+  local lazyrepo = "https://github.com/folke/lazy.nvim.git"
+  local out = vim.fn.system({ "git", "clone", "--filter=blob:none", "--branch=stable", lazyrepo, lazypath })
+  if vim.v.shell_error ~= 0 then
+    vim.api.nvim_echo({
+      { "Failed to clone lazy.nvim:\n", "ErrorMsg" },
+      { out, "WarningMsg" },
+      { "\nPress any key to exit...", "None" },
+    }, true, {})
+    vim.fn.getchar()
+    os.exit(1)
+  end
+end
+vim.opt.rtp:prepend(lazypath)
+
+require("lazy").setup({
+  -- ... your other plugins ...
+
+  -- 1. For side-by-side diffs
+  {
+    "sindrets/diffview.nvim",
+    dependencies = { "nvim-tree/nvim-web-devicons" }, -- optional, for file icons
+    cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles" },
+  },
+
+  -- 2. For inline gutter diffs
+  {
+    "lewis6991/gitsigns.nvim",
+    config = function()
+      require("gitsigns").setup()
+    end,
+  },
+
+  -- 3. Telescope fuzzy finder
+  {
+    "nvim-telescope/telescope.nvim",
+    tag = "0.1.8",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    config = function()
+      local builtin = require("telescope.builtin")
+      vim.keymap.set("n", "<leader>ff", builtin.find_files, { desc = "Telescope Find Files" })
+      vim.keymap.set("n", "<leader>fg", builtin.live_grep, { desc = "Telescope Live Grep" })
+      vim.keymap.set("n", "<leader>fb", builtin.buffers, { desc = "Telescope Buffers" })
+      vim.keymap.set("n", "<leader>fh", builtin.help_tags, { desc = "Telescope Help Tags" })
+    end,
+  },
+
+  -- 4. Catppuccin theme
+  {
+    "catppuccin/nvim",
+    name = "catppuccin",
+    priority = 1000,
+    config = function()
+      vim.cmd.colorscheme("catppuccin")
+    end,
+  },
+})

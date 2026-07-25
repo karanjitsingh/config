@@ -21,8 +21,8 @@
   ],
   "lastChangelogVersion": "0.80.6",
   "theme": "tailwind-night",
-  "defaultProvider": "zai",
-  "defaultModel": "glm-5.2",
+  "defaultProvider": "ollama",
+  "defaultModel": "qwen2.5-coder:32b-instruct-q6_K",
   "ayu": {
     "checkpoint": {
       "exclude": [

@@ -6,3 +6,6 @@ source "$TOOL_DIR/../lib.sh"
 echo "Setting up Neovim..."
 mkdir -p ~/.config/nvim
 link_file "$TOOL_DIR/init.lua" ~/.config/nvim/init.lua "Neovim config"
+
+echo "Installing/updating Neovim plugins..."
+nvim --headless "+Lazy! sync" +qa
