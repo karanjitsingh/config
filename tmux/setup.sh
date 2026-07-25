@@ -19,6 +19,17 @@ for plugin in tmux-resurrect tmux-continuum; do
     fi
 done
 
+# fzf is required by the `prefix + f` fuzzy window switcher
+if ! command -v fzf &> /dev/null; then
+    if command -v brew &> /dev/null; then
+        echo "Installing fzf via Homebrew..."
+        brew install fzf
+        echo "✓ fzf installed"
+    else
+        echo "⚠  fzf not found and Homebrew unavailable — install fzf to enable 'prefix + f'"
+    fi
+fi
+
 if command -v tmux &> /dev/null && tmux info &> /dev/null 2>&1; then
     tmux source ~/.tmux.conf
     echo "✓ tmux config reloaded"
