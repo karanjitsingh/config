@@ -170,11 +170,12 @@ require("lazy").setup({
     end,
   },
 
-  -- 4. Catppuccin theme
+  -- 4. Catppuccin theme (skip inside VSCode's neovim extension; it uses VSCode's own theme)
   {
     "catppuccin/nvim",
     name = "catppuccin",
     priority = 1000,
+    cond = not vim.g.vscode,
     config = function()
       vim.cmd.colorscheme("catppuccin")
     end,
