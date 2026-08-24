@@ -106,7 +106,7 @@
             "manipulators": [
               {
                 "from": { "key_code": "1", "modifiers": { "mandatory": [ "left_option" ] } },
-                "to": [ { "software_function": { "open_application": { "file_path": "/Applications/Brave Browser.app" } } } ],
+                "to": [ { "software_function": { "open_application": { "file_path": "/Applications/Arc.app" } } } ],
                 "type": "basic"
               },
               {
