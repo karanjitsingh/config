@@ -11,6 +11,10 @@ link_file "$TOOL_DIR/.tmux.conf" ~/.tmux.conf "tmux config"
 mkdir -p ~/.tmux
 link_file "$TOOL_DIR/window-picker.sh" ~/.tmux/window-picker.sh "window picker"
 
+# Claude Code hook, referenced by absolute path from ~/.claude/settings.json.
+# Feeds ~/.tmux/claude-panes.jsonl, which `tmux-claude` reads.
+link_file "$TOOL_DIR/claude-pane-track.sh" ~/.tmux/claude-pane-track.sh "claude pane tracker"
+
 if [ ! -d ~/.tmux/plugins/tpm ]; then
     echo "Installing TPM..."
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm

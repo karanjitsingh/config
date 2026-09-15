@@ -19,6 +19,7 @@ All pi settings, themes, extensions, and skills are:
 - **tmux/** - tmux configuration
 - **karabiner/** - Karabiner-Elements keyboard customization
 - **pi/** - pi coding-agent configuration (settings, extensions)
+- **scripts/** - standalone commands; the directory itself goes on `PATH`
 
 ## Installation
 
@@ -43,6 +44,22 @@ ln -sf $(pwd)/neovim/init.lua ~/.config/nvim/init.lua
 ln -sf $(pwd)/tmux/.tmux.conf ~/.tmux.conf
 tmux source ~/.tmux.conf  # reload if tmux is running
 ```
+
+### tmux-claude
+
+`tmux-claude` restores Claude Code conversations into the panes they ran in.
+`./setup.sh scripts` puts this directory on `PATH`, and `./setup.sh tmux` links the
+`claude-pane-track.sh` hook, but the hook only fires once it's registered in
+`~/.claude/settings.json`, which this repo does not manage. **TODO:** decide whether
+setup should write it; for now add it by hand, under `SessionStart`,
+`UserPromptSubmit` and `SessionEnd`:
+
+```json
+{ "type": "command", "command": "/home/<you>/.tmux/claude-pane-track.sh", "async": true }
+```
+
+The path must be absolute — Claude Code does not expand `~`. Needs `jq`; without
+it the hook exits silently, which looks the same as not being registered.
 
 ### Karabiner
 

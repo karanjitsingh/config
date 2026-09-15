@@ -1,0 +1,492 @@
+#!/usr/bin/env python3
+"""Put Claude Code conversations back into the tmux panes they were running in.
+
+tmux-resurrect restores windows, panes and cwds. It cannot restore the claude
+session that lived in a pane: a restored pane runs the shell again, and `claude`
+there starts a fresh conversation. This finds the session id that belongs to each
+pane and types the `claude --resume <id>` back in.
+
+    tmux-claude list [session]     what each pane holds, or used to hold
+    tmux-claude restore            the current window
+    tmux-claude restore <session>  every pane in that tmux session
+    tmux-claude restore all        everywhere
+    tmux-claude scan               backfill the registry from live claude processes
+
+restore types the command in without pressing Enter; --run presses it.
+
+Four matchers, best first. Each one is needed somewhere:
+
+  registry/pane  ~/.tmux/claude-panes.jsonl written by claude-pane-track.sh, keyed
+                 on pane id. A pane id survives renames, reordering and moving a
+                 pane between windows, but is reissued by a new tmux server, so it
+                 is only trusted when the record's server pid is the running one.
+  registry/coord same file, keyed on session:window.pane plus cwd. Survives reboots.
+  saved          resurrect stores each pane's *full* command, so a pane started as
+                 `claude --resume <uuid>` already has its id in its save file.
+  title          claude sets the pane title to its ai-title, resurrect restores
+                 titles, and transcripts carry the same string on an `ai-title`
+                 line. Last resort: forks and /clear descendants inherit the
+                 parent's title, so a title can match several sessions.
+
+Ranking and labels come from ~/.claude/history.jsonl prompt timestamps, never file
+mtimes -- transcripts get bulk-touched and their mtimes go flat.
+"""
+
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+
+REGISTRY = os.environ.get(
+    "CLAUDE_TMUX_REGISTRY", os.path.expanduser("~/.tmux/claude-panes.jsonl")
+)
+PROJECTS = os.path.expanduser("~/.claude/projects")
+HISTORY = os.path.expanduser("~/.claude/history.jsonl")
+RESURRECT = os.path.expanduser("~/.local/share/tmux/resurrect")
+SHELLS = {"zsh", "bash", "sh", "fish", "dash"}
+UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+TAB = "\t"
+SELF_PANE = os.environ.get("TMUX_PANE", "")
+
+RANK = {"live": 0, "registry/pane": 1, "registry/coord": 2, "saved": 3, "title": 4}
+
+
+def tmux(*args):
+    r = subprocess.run(["tmux", *args], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else ""
+
+
+def server_pid():
+    return tmux("display", "-p", "#{pid}").strip()
+
+
+def panes(scope):
+    """scope: None (current window), 'all', or a tmux session name."""
+    args = ["list-panes", "-F", TAB.join([
+        "#{pane_id}", "#{session_name}", "#{window_index}", "#{window_name}",
+        "#{pane_index}", "#{pane_current_command}", "#{pane_current_path}",
+        "#{pane_title}", "#{pane_pid}",
+    ])]
+    if scope == "all":
+        args.insert(1, "-a")
+    elif scope:
+        args[1:1] = ["-s", "-t", scope]
+    elif SELF_PANE:
+        args[1:1] = ["-t", SELF_PANE]
+    out = tmux(*args)
+    rows = []
+    for line in out.splitlines():
+        f = line.split(TAB)
+        if len(f) != 9:
+            continue
+        rows.append({
+            "pane_id": f[0], "tmux_session": f[1], "window_index": int(f[2]),
+            "window_name": f[3], "pane_index": int(f[4]), "command": f[5],
+            "cwd": f[6], "title": f[7], "pane_pid": f[8],
+        })
+    return rows
+
+
+def coord(p):
+    return "%s:%d.%d" % (p["tmux_session"], p["window_index"], p["pane_index"])
+
+
+def strip_marker(title):
+    return re.sub(r"^[✳✴*✹]️?\s*", "", title or "").strip()
+
+
+# --- evidence ---------------------------------------------------------------
+
+_history = None
+
+
+def history():
+    """session id -> {turns, first, last, last_prompt} from typed prompts."""
+    global _history
+    if _history is None:
+        _history = {}
+        try:
+            with open(HISTORY, errors="replace") as fh:
+                for line in fh:
+                    try:
+                        r = json.loads(line)
+                    except ValueError:
+                        continue
+                    sid, ts = r.get("sessionId"), r.get("timestamp") or 0
+                    if not sid:
+                        continue
+                    e = _history.setdefault(
+                        sid, {"turns": 0, "first": ts, "last": 0, "last_prompt": ""}
+                    )
+                    e["turns"] += 1
+                    e["first"] = min(e["first"], ts)
+                    if ts >= e["last"]:
+                        e["last"] = ts
+                        e["last_prompt"] = (r.get("display") or "").replace("\n", " ")
+        except FileNotFoundError:
+            pass
+    return _history
+
+
+def transcript_of(sid):
+    hits = glob.glob(os.path.join(PROJECTS, "*", sid + ".jsonl"))
+    return hits[0] if hits else None
+
+
+def age(ms):
+    if not ms:
+        return "-"  # no session resolved, same as the TURNS column
+    secs = time.time() - ms / 1000
+    for div, unit in ((86400, "d"), (3600, "h"), (60, "m")):
+        if secs >= div:
+            return "%d%s" % (secs // div, unit)
+    return "now"
+
+
+# --- matchers ---------------------------------------------------------------
+
+def live_session(pane):
+    """Session id of the claude currently running in this pane, if it shows one."""
+    if pane["command"] != "claude":
+        return None
+    out = subprocess.run(["pgrep", "-P", pane["pane_pid"], "-x", "claude"],
+                         capture_output=True, text=True).stdout.split()
+    for pid in out:
+        try:
+            with open("/proc/%s/cmdline" % pid, "rb") as fh:
+                cmd = fh.read().decode(errors="replace").replace("\0", " ")
+        except OSError:
+            continue
+        m = re.search(r"--resume\s+(" + UUID + ")", cmd)
+        if m:
+            return m.group(1)
+        return ""  # bare `claude`: running, id not knowable from the cmdline
+    return None
+
+
+def load_registry():
+    """Per-pane chains, indexed by pane id and by coordinates.
+
+    A pane holds a *chain* of session ids, not one: /clear mints a new id mid-pane.
+    The newest live id is what to resume; the older ones stay as alternates. An
+    `end` only closes a pane when it refers to that newest id -- SessionEnd for the
+    old session can land after SessionStart for the new one.
+    """
+    by_pane, by_coord = {}, {}
+    try:
+        fh = open(REGISTRY, errors="replace")
+    except FileNotFoundError:
+        return by_pane, by_coord
+    with fh:
+        for line in fh:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            ck = (r.get("tmux_session"), r.get("window_index"), r.get("pane_index"))
+            pk = (r.get("server_pid"), r.get("pane_id"))
+            by_coord.setdefault(ck, []).append(r)
+            if all(pk):
+                by_pane.setdefault(pk, []).append(r)
+    return by_pane, by_coord
+
+
+def from_chain(recs):
+    """(session_id, closed, alternates, record) for one pane's records."""
+    live = [r for r in recs if r.get("status") != "end"]
+    if not live:
+        return None, True, [], recs[-1]
+    newest = live[-1]
+    closed = recs[-1].get("status") == "end" and \
+        recs[-1].get("session_id") == newest.get("session_id")
+    seen, alts = {newest["session_id"]}, []
+    for r in reversed(live[:-1]):
+        if r["session_id"] not in seen:
+            seen.add(r["session_id"])
+            alts.append(r["session_id"])
+    return newest["session_id"], closed, alts, newest
+
+
+_saved = None
+
+
+def saved_commands():
+    """(session, window_index, pane_index) -> uuid, from resurrect save files."""
+    global _saved
+    if _saved is None:
+        _saved = {}
+        files = sorted(glob.glob(os.path.join(RESURRECT, "tmux_resurrect_*.txt")),
+                       reverse=True)
+        for path in files:
+            try:
+                fh = open(path, errors="replace")
+            except OSError:
+                continue
+            with fh:
+                for line in fh:
+                    if not line.startswith("pane\t") or "--resume" not in line:
+                        continue
+                    f = line.rstrip("\n").split(TAB)
+                    if len(f) < 11:
+                        continue
+                    m = re.search(r"--resume\s+(" + UUID + ")", f[10])
+                    if not m:
+                        continue
+                    try:
+                        key = (f[1], int(f[2]), int(f[5]))
+                    except ValueError:
+                        continue
+                    _saved.setdefault(key, m.group(1))  # newest file wins
+    return _saved
+
+
+_titles = None
+
+
+def title_index():
+    """ai-title -> [session_id], across every project dir."""
+    global _titles
+    if _titles is None:
+        _titles = {}
+        pat = re.compile(r'"aiTitle":"((?:[^"\\]|\\.)*)"')
+        for d in glob.glob(os.path.join(PROJECTS, "*")):
+            for path in glob.glob(os.path.join(d, "*.jsonl")):
+                try:
+                    size = os.path.getsize(path)
+                    with open(path, errors="replace") as fh:
+                        # ai-title lines repeat all through a transcript, so the
+                        # tail is enough and big transcripts stay cheap to read.
+                        if size > 256 * 1024:
+                            fh.seek(size - 256 * 1024)
+                        chunk = fh.read()
+                except OSError:
+                    continue
+                found = pat.findall(chunk)
+                if not found:
+                    continue
+                try:
+                    title = json.loads('"%s"' % found[-1])
+                except ValueError:
+                    continue
+                _titles.setdefault(title, []).append(
+                    os.path.basename(path)[: -len(".jsonl")]
+                )
+    return _titles
+
+
+def resolve(pane, reg_pane, reg_coord, spid):
+    """Best candidate for a pane: dict(session_id, source, note, alternates)."""
+    running = live_session(pane)
+    if running:
+        return {"session_id": running, "source": "live", "note": "", "alternates": []}
+    if running == "":
+        return {"session_id": None, "source": "live", "note": "bare claude, id unknown",
+                "alternates": []}
+
+    recs = reg_pane.get((spid, pane["pane_id"]))
+    source = "registry/pane"
+    if not recs:
+        recs = reg_coord.get(
+            (pane["tmux_session"], pane["window_index"], pane["pane_index"])
+        )
+        source = "registry/coord"
+    if recs:
+        sid, closed, alts, rec = from_chain(recs)
+        note = ""
+        if closed:
+            note = "closed"
+        elif rec.get("cwd") and rec["cwd"] != pane["cwd"] and source == "registry/coord":
+            note = "cwd moved"
+        if sid and transcript_of(sid):
+            return {"session_id": sid, "source": source, "note": note,
+                    "alternates": alts}
+
+    sid = saved_commands().get(
+        (pane["tmux_session"], pane["window_index"], pane["pane_index"])
+    )
+    if sid and transcript_of(sid):
+        return {"session_id": sid, "source": "saved", "note": "", "alternates": []}
+
+    title = strip_marker(pane["title"])
+    if title and title != pane["title"]:  # a title claude actually set
+        hits = [s for s in title_index().get(title, []) if transcript_of(s)]
+        hits.sort(key=lambda s: history().get(s, {}).get("last", 0), reverse=True)
+        if len(hits) == 1:
+            return {"session_id": hits[0], "source": "title", "note": "",
+                    "alternates": []}
+        if hits:
+            return {"session_id": hits[0], "source": "title",
+                    "note": "ambiguous, %d share this title" % len(hits),
+                    "alternates": hits[1:]}
+        return {"session_id": None, "source": "title",
+                "note": "no transcript for title", "alternates": []}
+    return None
+
+
+# --- actions ---------------------------------------------------------------
+
+def rows_for(scope):
+    spid = server_pid()
+    reg_pane, reg_coord = load_registry()
+    out = []
+    for pane in panes(scope):
+        cand = resolve(pane, reg_pane, reg_coord, spid)
+        if cand:
+            out.append((pane, cand))
+    # A session id belongs to its most recent claim only: after a crash leaves no
+    # SessionEnd, an old pane keeps listing a session that now lives elsewhere.
+    best = {}
+    for pane, cand in out:
+        sid = cand["session_id"]
+        if not sid:
+            continue
+        prev = best.get(sid)
+        if prev is None or RANK[cand["source"]] < RANK[prev[1]["source"]]:
+            best[sid] = (pane, cand)
+    for pane, cand in out:
+        sid = cand["session_id"]
+        if sid and best[sid][0]["pane_id"] != pane["pane_id"]:
+            cand["note"] = (cand["note"] + "; " if cand["note"] else "") + \
+                "claimed by %s" % coord(best[sid][0])
+            cand["stale"] = True
+    return out
+
+
+def do_list(scope):
+    rows = rows_for(scope)
+    if not rows:
+        print("no claude panes found")
+        return
+    head = ("PANE", "WINDOW", "STATE", "VIA", "AGE", "TURNS", "SESSION", "TOPIC / NOTE")
+    table = []
+    for pane, c in rows:
+        sid = c["session_id"]
+        h = history().get(sid, {}) if sid else {}
+        topic = strip_marker(pane["title"]) or (h.get("last_prompt", "")[:40])
+        if c["note"]:
+            topic = "%s  [%s]" % (topic, c["note"])
+        table.append((
+            coord(pane), pane["window_name"],
+            "running" if pane["command"] == "claude" else "idle",
+            c["source"], age(h.get("last")), str(h.get("turns", "-")),
+            sid or "-", topic,
+        ))
+    w = [max(len(h), *(len(r[i]) for r in table)) for i, h in enumerate(head)]
+    fmt = "  ".join("%%-%ds" % x for x in w[:-1]) + "  %s"
+    print(fmt % head)
+    for r in table:
+        print(fmt % r)
+
+
+def send(pane, cmd, press_enter):
+    """Type cmd at the pane's prompt. Clears a half-typed line first, and checks
+    it landed -- send-keys to a pane that is mid-redraw can arrive truncated."""
+    is_self = pane["pane_id"] == SELF_PANE
+    for attempt in (1, 2):
+        if not is_self:
+            tmux("send-keys", "-t", pane["pane_id"], "C-c")
+            time.sleep(0.3)
+        tmux("send-keys", "-t", pane["pane_id"], "-l", cmd)
+        if is_self:
+            break  # our own prompt only echoes it once this process exits
+        time.sleep(0.3)
+        if cmd in tmux("capture-pane", "-p", "-t", pane["pane_id"]):
+            break
+    if press_enter:
+        tmux("send-keys", "-t", pane["pane_id"], "Enter")
+
+
+def do_restore(scope, press_enter, force):
+    rows = rows_for(scope)
+    sent = []
+    for pane, c in rows:
+        sid, note = c["session_id"], c["note"]
+        if c["source"] == "live":
+            print("skip %-12s already running claude" % coord(pane))
+            continue
+        if not sid:
+            print("skip %-12s %s" % (coord(pane), note or "nothing recorded"))
+            continue
+        if pane["command"] not in SHELLS and pane["pane_id"] != SELF_PANE:
+            print("skip %-12s busy (%s)" % (coord(pane), pane["command"]))
+            continue
+        if (c.get("stale") or "ambiguous" in note or "closed" in note) and not force:
+            print("skip %-12s %s (--force to include)" % (coord(pane), note))
+            continue
+        send(pane, "claude --resume %s" % sid, press_enter)
+        h = history().get(sid, {})
+        print("%-9s %-12s %s  %s" % (
+            "resumed" if press_enter else "prefilled", coord(pane), sid,
+            strip_marker(pane["title"])[:44] or h.get("last_prompt", "")[:44]))
+        sent.append(sid)
+    if sent and not press_enter:
+        print("\npress Enter in each pane to start")
+    if not sent:
+        print("nothing to restore")
+
+
+def do_scan():
+    """Record what is running right now, straight from the process table."""
+    spid = server_pid()
+    written = 0
+    with open(REGISTRY, "a") as fh:
+        for pane in panes("all"):
+            sid = live_session(pane)
+            if not sid:
+                if sid == "":
+                    print("unresolved %-12s bare claude, no id in cmdline"
+                          % coord(pane))
+                continue
+            rec = {
+                "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "status": "live", "event": "scan", "session_id": sid,
+                "transcript": transcript_of(sid) or "", "cwd": pane["cwd"],
+                "tmux_session": pane["tmux_session"],
+                "window_index": pane["window_index"],
+                "window_name": pane["window_name"],
+                "pane_index": pane["pane_index"], "pane_id": pane["pane_id"],
+                "pane_title": pane["title"], "server_pid": spid,
+            }
+            fh.write(json.dumps(rec) + "\n")
+            written += 1
+            print("recorded   %-12s %s" % (coord(pane), sid))
+    print("%d pane(s) recorded in %s" % (written, REGISTRY))
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="tmux-claude", description=__doc__.split("\n\n")[1],
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("action", nargs="?", choices=["list", "restore", "scan"])
+    ap.add_argument("target", nargs="?",
+                    help="tmux session name, or 'all'. restore with no target "
+                         "means the current window")
+    ap.add_argument("--run", action="store_true", help="press Enter as well")
+    ap.add_argument("--force", action="store_true",
+                    help="include ambiguous, closed and reclaimed rows")
+    args = ap.parse_args()
+
+    if not args.action:
+        ap.print_help()
+        return
+
+    if not tmux("list-sessions"):
+        sys.exit("no tmux server")
+
+    if args.action == "scan":
+        do_scan()
+    elif args.action == "restore":
+        if not args.target and not SELF_PANE:
+            sys.exit("restore with no target needs to run inside tmux")
+        do_restore(args.target, args.run, args.force)
+    else:
+        do_list(args.target or "all")
+
+
+if __name__ == "__main__":
+    main()
