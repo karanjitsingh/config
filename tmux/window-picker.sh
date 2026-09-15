@@ -3,13 +3,18 @@
 # which runs it inside a display-popup.
 #
 # Each line carries three tab-separated fields:
-#   1. pane id      -- the switch-client target, never displayed
-#   2. tree form    -- windows grouped under a session header
-#   3. flat form    -- every row prefixed with `session:index`
+#   1. tree form    -- windows indented under a session header
+#   2. flat form    -- every row tagged with `session:index`
+#   3. pane id      -- the switch-client target, never displayed
 #
 # fzf can only match against what it displays, so the two display forms are
 # swapped on the fly: the tree reads well while browsing, but as soon as there's
 # a query we switch to the flat form so session names are searchable.
+#
+# Solo windows are shown as `session  window_name`, coloured like a session
+# header since that is effectively what they are, so fuzzy matching a
+# concatenation like "lassiclaude" hits. Nested rows sit under a session header
+# so the tree reads naturally.
 #
 # If the popup ever opens and closes instantly, fzf is missing from the popup's
 # PATH -- see the ~/.zshenv note in setup.sh.
@@ -83,6 +88,7 @@ list_windows() {
             -v here="$here" \
             -v hdr="$HDR" -v dim="$DIM" -v rst="$RST" \
             -v tab="$TAB" '
+        function spc(k,  s) { s = ""; while (k-- > 0) s = s " "; return s }
         {
             n++
             pid[n] = $1; sess[n] = $2; idx[n] = $3; name[n] = $4; cmd[n] = $5
@@ -94,17 +100,19 @@ list_windows() {
             if ($6 == 1) current[$2] = $1
         }
         END {
-            # Pad against the plain text, before any colour is added. The two
-            # display forms need their own left-column widths.
+            # Pad against the plain text, before any colour is added. Nested
+            # rows put a bare index under a session header; solo rows carry just
+            # the session name (no index) so fuzzy matches like "lassiclaude"
+            # hit, and are coloured like a header since that is what they are.
             for (i = 1; i <= n; i++) {
-                flat[i] = sess[i] ":" idx[i]
-                tree[i] = (count[sess[i]] == 1) ? flat[i] : "   " idx[i]
-                if (length(tree[i]) > wtree) wtree = length(tree[i])
-                if (length(flat[i]) > wflat) wflat = length(flat[i])
+                solo[i] = (count[sess[i]] == 1)
+                tloc[i] = solo[i] ? sess[i] : "   " idx[i]
+                floc[i] = solo[i] ? sess[i] : sess[i] ":" idx[i]
+                if (length(tloc[i]) > wtloc) wtloc = length(tloc[i])
+                if (length(floc[i]) > wfloc) wfloc = length(floc[i])
                 if (length(name[i]) > wname) wname = length(name[i])
             }
-            treefmt = "%-" wtree "s  %-" wname "s  %s(%s)%s"
-            flatfmt = "%-" wflat "s  %-" wname "s  %s(%s)%s"
+            rowfmt = "%s  %-" wname "s  %s(%s)%s"
 
             # Buffered so the row number of the window we were called from can
             # be reported on the first line, before the rows themselves.
@@ -113,16 +121,19 @@ list_windows() {
                 if (count[session] > 1) {
                     # Tagged "(session)" in the flat form only, where it would
                     # otherwise be indistinguishable from a window row.
-                    out[++rows] = current[session] tab \
-                                  hdr session rst tab \
-                                  hdr session rst "  " dim "(session)" rst
+                    out[++rows] = hdr session rst tab \
+                                  hdr session rst "  " dim "(session)" rst tab \
+                                  current[session]
                 }
                 for (i = 1; i <= n; i++) {
                     if (sess[i] != session) continue
                     if (here != "" && pid[i] == here) activerow = rows + 1
-                    out[++rows] = pid[i] tab \
-                                  sprintf(treefmt, tree[i], name[i], dim, cmd[i], rst) tab \
-                                  sprintf(flatfmt, flat[i], name[i], dim, cmd[i], rst)
+                    tpad = tloc[i] spc(wtloc - length(tloc[i]))
+                    fpad = floc[i] spc(wfloc - length(floc[i]))
+                    if (solo[i]) { tpad = hdr tpad rst; fpad = hdr fpad rst }
+                    out[++rows] = sprintf(rowfmt, tpad, name[i], dim, cmd[i], rst) tab \
+                                  sprintf(rowfmt, fpad, name[i], dim, cmd[i], rst) tab \
+                                  pid[i]
                 }
             }
 
@@ -132,8 +143,8 @@ list_windows() {
     '
 }
 
-# Field 2 (tree) while the query is empty, field 3 (flat) once it isn't.
-retransform='transform:[ -n {q} ] && echo "change-with-nth(3)" || echo "change-with-nth(2)"'
+# Field 1 (tree) while the query is empty, field 2 (flat) once it isn't.
+retransform='transform:[ -n {q} ] && echo "change-with-nth(2)" || echo "change-with-nth(1)"'
 
 # First line is the row holding the window we were called from, 0 if unknown.
 listing=$(list_windows)
@@ -152,13 +163,13 @@ fzf_args=(
     --marker='▌'
     --color=marker:39
     --delimiter="$TAB"
-    --with-nth=2
-    --accept-nth=1
+    --with-nth=1
+    --accept-nth=3
     --bind "change:$retransform"
     --bind 'enter:clear-selection+accept'
     --bind 'tab:ignore,btab:ignore'
     --prompt='go> '
-    --preview="'$SELF' --preview {1}"
+    --preview="'$SELF' --preview {3}"
     --preview-window='right,65%,border-left'
 )
 
