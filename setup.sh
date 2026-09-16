@@ -16,6 +16,7 @@ show_usage() {
     echo "  tmux        tmux config + plugins"
     echo "  karabiner   Karabiner-Elements config (macOS only)"
     echo "  pi          pi coding-agent"
+    echo "  path        Ensure scripts/ is on PATH via ~/.zshrc"
     echo ""
 }
 
@@ -26,11 +27,12 @@ fi
 
 for cmd in "$@"; do
     case "$cmd" in
-        all)        run neovim; run tmux; run karabiner; run pi ;;
+        all)        run neovim; run tmux; run karabiner; run pi; run scripts ;;
         neovim)     run neovim ;;
         tmux)       run tmux ;;
         karabiner)  run karabiner ;;
         pi)         run pi ;;
+        path)       run scripts ;;
         -h|--help)  show_usage; exit 0 ;;
         *)
             echo "Unknown command: $cmd"
