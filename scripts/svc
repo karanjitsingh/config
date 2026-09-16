@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Declarative wrapper for managing custom systemd services.
+
+Source of truth: ~/.config/svc/services.toml
+Usage: svc sync | diff | list | edit | start|stop|restart|status <name> | logs <name> [...]
+"""
+import argparse
+import os
+import pwd
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+UNIT_DIR = Path("/etc/systemd/system")
+MARKER = "# Managed by svc — do not edit directly"
+
+EXAMPLE_CONFIG = """\
+# svc services config
+#
+# [service.myapp]
+# path = "/home/kj/apps/myapp"
+# command = "node server.js"
+# sudo = false
+#
+# [service.webserver]
+# path = "/home/kj/apps/https-server"
+# command = "python3 serve.py --port 443"
+# sudo = true
+"""
+
+
+def real_user():
+    return os.environ.get("SUDO_USER") or os.environ.get("USER") or pwd.getpwuid(os.getuid()).pw_name
+
+
+def real_home():
+    user = real_user()
+    try:
+        return Path(pwd.getpwnam(user).pw_dir)
+    except KeyError:
+        return Path.home()
+
+
+def config_path():
+    return real_home() / ".config" / "svc" / "services.toml"
+
+
+def ensure_root():
+    if os.geteuid() != 0:
+        os.execvp("sudo", ["sudo", sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
+
+
+def load_config(path):
+    if not path.exists():
+        return {}
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return data.get("service", {})
+
+
+def unit_path(name):
+    return UNIT_DIR / f"svc-{name}.service"
+
+
+def generate_unit(name, entry):
+    path = entry["path"]
+    command = entry["command"].replace("'", "'\"'\"'")
+    sudo = entry.get("sudo", False)
+    # sudo=true means "run as root", mirroring `sudo <command>` invoked by the
+    # real user — so set SUDO_USER the way the real sudo binary would, in case
+    # the service inspects it (e.g. to find the invoking user's home dir).
+    user_line = f"Environment=SUDO_USER={real_user()}\n" if sudo else f"User={real_user()}\n"
+    return (
+        f"{MARKER}\n"
+        f"[Unit]\n"
+        f"Description=svc: {name}\n"
+        f"After=network.target\n"
+        f"\n"
+        f"[Service]\n"
+        f"Type=simple\n"
+        f"WorkingDirectory={path}\n"
+        f"ExecStart=/bin/bash -c '{command}'\n"
+        f"Restart=on-failure\n"
+        f"RestartSec=5\n"
+        f"{user_line}"
+        f"\n"
+        f"[Install]\n"
+        f"WantedBy=multi-user.target\n"
+    )
+
+
+def existing_managed_units():
+    names = set()
+    if not UNIT_DIR.exists():
+        return names
+    for p in UNIT_DIR.glob("svc-*.service"):
+        try:
+            text = p.read_text()
+        except OSError:
+            continue
+        if text.startswith(MARKER):
+            names.add(p.stem[len("svc-"):])
+    return names
+
+
+def plan(config):
+    """Return (to_add, to_update, to_remove, unchanged) without touching disk state assumptions beyond reads."""
+    existing = existing_managed_units()
+    desired = set(config.keys())
+    to_remove = sorted(existing - desired)
+    to_add, to_update, unchanged = [], [], []
+    for name, entry in config.items():
+        text = generate_unit(name, entry)
+        up = unit_path(name)
+        if not up.exists():
+            to_add.append(name)
+        elif up.read_text() != text:
+            to_update.append(name)
+        else:
+            unchanged.append(name)
+    return sorted(to_add), sorted(to_update), to_remove, sorted(unchanged)
+
+
+def cmd_diff(args):
+    config = load_config(config_path())
+    to_add, to_update, to_remove, unchanged = plan(config)
+    print(f"Would add:     {to_add or 'none'}")
+    print(f"Would update:  {to_update or 'none'}")
+    print(f"Would remove:  {to_remove or 'none'}")
+    print(f"Unchanged:     {unchanged or 'none'}")
+
+
+def cmd_sync(args):
+    ensure_root()
+    cfg_path = config_path()
+    config = load_config(cfg_path)
+    if not config:
+        print(f"No services defined in {cfg_path}. Run 'svc edit' to add some.")
+        return
+
+    to_add, to_update, to_remove, unchanged = plan(config)
+    changed = False
+
+    if to_remove:
+        print("The following services are no longer in the config and will be stopped/removed:")
+        for n in to_remove:
+            print(f"  - {n}")
+        resp = input("Proceed with removal? [y/N] ").strip().lower()
+        if resp == "y":
+            for n in to_remove:
+                subprocess.run(["systemctl", "disable", "--now", f"svc-{n}"], check=False)
+                unit_path(n).unlink(missing_ok=True)
+                changed = True
+        else:
+            print("Skipping removals.")
+            to_remove = []
+
+    for name in to_add + to_update:
+        unit_path(name).write_text(generate_unit(name, config[name]))
+        changed = True
+
+    if changed:
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+
+    for name in to_add:
+        subprocess.run(["systemctl", "enable", "--now", f"svc-{name}"], check=False)
+    for name in to_update:
+        subprocess.run(["systemctl", "restart", f"svc-{name}"], check=False)
+
+    print(f"Added:     {to_add or 'none'}")
+    print(f"Updated:   {to_update or 'none'}")
+    print(f"Removed:   {to_remove or 'none'}")
+    print(f"Unchanged: {unchanged or 'none'}")
+
+
+def cmd_list(args):
+    config = load_config(config_path())
+    if not config:
+        print(f"No services defined in {config_path()}. Run 'svc edit' to add some.")
+        return
+    to_add, to_update, to_remove, unchanged = plan(config)
+    in_sync_names = set(unchanged)
+    print(f"{'NAME':<20} {'SUDO':<6} {'ACTIVE':<10} {'ENABLED':<10} {'IN SYNC'}")
+    for name, entry in sorted(config.items()):
+        sudo = str(entry.get("sudo", False)).lower()
+        active = subprocess.run(
+            ["systemctl", "is-active", f"svc-{name}"], capture_output=True, text=True
+        ).stdout.strip() or "unknown"
+        enabled = subprocess.run(
+            ["systemctl", "is-enabled", f"svc-{name}"], capture_output=True, text=True
+        ).stdout.strip() or "unknown"
+        in_sync = "yes" if name in in_sync_names else "no"
+        print(f"{name:<20} {sudo:<6} {active:<10} {enabled:<10} {in_sync}")
+    if to_remove:
+        print(f"\nManaged units with no config entry (run 'svc sync' to remove): {to_remove}")
+
+
+def cmd_edit(args):
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(EXAMPLE_CONFIG)
+    editor = os.environ.get("EDITOR") or next(
+        (e for e in ("nvim", "vim", "nano") if shutil.which(e)), None
+    )
+    if not editor:
+        print(f"No editor found (checked $EDITOR, nvim, vim, nano). Config is at {path}")
+        return
+    os.execvp(editor, [editor, str(path)])
+
+
+def cmd_passthrough(args):
+    if args.action in ("start", "stop", "restart"):
+        ensure_root()
+    result = subprocess.run(["systemctl", args.action, f"svc-{args.name}"])
+    sys.exit(result.returncode)
+
+
+def cmd_logs(args):
+    cmd = ["journalctl", "-u", f"svc-{args.name}", "-n", "100"]
+    if not args.no_follow:
+        cmd.append("-f")
+    cmd.extend(args.extra)
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="svc")
+    sub = parser.add_subparsers(dest="cmd")
+
+    sub.add_parser("sync", help="reconcile systemd units to match the config").set_defaults(func=cmd_sync)
+    sub.add_parser("diff", help="show what sync would change").set_defaults(func=cmd_diff)
+    sub.add_parser("list", help="list configured services and their status").set_defaults(func=cmd_list)
+    sub.add_parser("edit", help="open the config file in an editor").set_defaults(func=cmd_edit)
+
+    for action in ("start", "stop", "restart", "status"):
+        p = sub.add_parser(action, help=f"systemctl {action} on a managed service")
+        p.add_argument("name")
+        p.set_defaults(func=cmd_passthrough, action=action)
+
+    p = sub.add_parser("logs", help="tail logs for a managed service")
+    p.add_argument("name")
+    p.add_argument("--no-follow", action="store_true")
+    p.add_argument("extra", nargs=argparse.REMAINDER)
+    p.set_defaults(func=cmd_logs)
+
+    args = parser.parse_args()
+    if not args.cmd:
+        parser.print_help()
+        sys.exit(0)
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
