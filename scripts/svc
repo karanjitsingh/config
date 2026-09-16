@@ -3,8 +3,13 @@
 
 Source of truth: ~/.config/svc/services.toml
 Usage: svc sync | diff | list | edit | start|stop|restart|status <name> | logs <name> [...]
+
+sudo=true entries become system-level units (/etc/systemd/system), run as
+root. sudo=false entries become systemd --user units under the given
+`user`'s own session (~/.config/systemd/user), no root needed to manage.
 """
 import argparse
+import collections
 import os
 import pwd
 import shutil
@@ -13,22 +18,35 @@ import sys
 import tomllib
 from pathlib import Path
 
-UNIT_DIR = Path("/etc/systemd/system")
+SYSTEM_UNIT_DIR = Path("/etc/systemd/system")
 MARKER = "# Managed by svc — do not edit directly"
+
+DEFAULT_PATH = (
+    "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:"
+    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+)
 
 EXAMPLE_CONFIG = """\
 # svc services config
+#
+# sudo=false -> runs as a systemd --user unit under `user` (no root needed
+#               to manage it). `user` defaults to whoever owns this file if
+#               omitted.
+# sudo=true  -> runs as a system-level unit, as root.
 #
 # [service.myapp]
 # path = "/home/kj/apps/myapp"
 # command = "node server.js"
 # sudo = false
+# user = "kj"
 #
 # [service.webserver]
 # path = "/home/kj/apps/https-server"
 # command = "python3 serve.py --port 443"
 # sudo = true
 """
+
+Removal = collections.namedtuple("Removal", "name kind user")
 
 
 def real_user():
@@ -60,18 +78,40 @@ def load_config(path):
     return data.get("service", {})
 
 
-def unit_path(name):
-    return UNIT_DIR / f"svc-{name}.service"
+def entry_user(entry):
+    return entry.get("user") or real_user()
+
+
+def system_unit_path(name):
+    return SYSTEM_UNIT_DIR / f"svc-{name}.service"
+
+
+def user_unit_dir(user):
+    return Path(pwd.getpwnam(user).pw_dir) / ".config" / "systemd" / "user"
+
+
+def user_unit_path(user, name):
+    return user_unit_dir(user) / f"svc-{name}.service"
+
+
+def unit_path_for(name, entry):
+    if entry.get("sudo", False):
+        return system_unit_path(name)
+    return user_unit_path(entry_user(entry), name)
 
 
 def generate_unit(name, entry):
     path = entry["path"]
     command = entry["command"].replace("'", "'\"'\"'")
     sudo = entry.get("sudo", False)
-    # sudo=true means "run as root", mirroring `sudo <command>` invoked by the
-    # real user — so set SUDO_USER the way the real sudo binary would, in case
-    # the service inspects it (e.g. to find the invoking user's home dir).
-    user_line = f"Environment=SUDO_USER={real_user()}\n" if sudo else f"User={real_user()}\n"
+    if sudo:
+        # Mirrors what running `sudo <command>` as the real user would set,
+        # in case the service inspects SUDO_USER (e.g. to find that user's home).
+        identity_line = f"Environment=SUDO_USER={entry_user(entry)}\n"
+        wanted_by = "multi-user.target"
+    else:
+        identity_line = ""  # user units always run as their own owner
+        wanted_by = "default.target"
     return (
         f"{MARKER}\n"
         f"[Unit]\n"
@@ -84,18 +124,19 @@ def generate_unit(name, entry):
         f"ExecStart=/bin/bash -c '{command}'\n"
         f"Restart=on-failure\n"
         f"RestartSec=5\n"
-        f"{user_line}"
+        f"{identity_line}"
+        f"Environment=PATH={DEFAULT_PATH}\n"
         f"\n"
         f"[Install]\n"
-        f"WantedBy=multi-user.target\n"
+        f"WantedBy={wanted_by}\n"
     )
 
 
-def existing_managed_units():
+def existing_marked_units(unit_dir):
     names = set()
-    if not UNIT_DIR.exists():
+    if not unit_dir.exists():
         return names
-    for p in UNIT_DIR.glob("svc-*.service"):
+    for p in unit_dir.glob("svc-*.service"):
         try:
             text = p.read_text()
         except OSError:
@@ -105,30 +146,74 @@ def existing_managed_units():
     return names
 
 
+def write_as_user(path, text, user):
+    pw = pwd.getpwnam(user)
+    home = Path(pw.pw_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    os.chown(path, pw.pw_uid, pw.pw_gid)
+    d = path.parent
+    while d != home and str(d).startswith(str(home)):
+        os.chown(d, pw.pw_uid, pw.pw_gid)
+        d = d.parent
+
+
+def user_systemctl(user, *args, capture=False):
+    uid = pwd.getpwnam(user).pw_uid
+    if os.getuid() == uid:
+        cmd = ["systemctl", "--user", *args]
+        env = os.environ.copy()
+        env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
+    else:
+        cmd = ["sudo", "-u", user, "env", f"XDG_RUNTIME_DIR=/run/user/{uid}", "systemctl", "--user", *args]
+        env = None
+    return subprocess.run(cmd, env=env, capture_output=capture, text=True, check=False)
+
+
+def ensure_linger(user):
+    result = subprocess.run(
+        ["loginctl", "show-user", user, "--property=Linger"], capture_output=True, text=True
+    )
+    if result.stdout.strip() != "Linger=yes":
+        subprocess.run(["loginctl", "enable-linger", user], check=False)
+
+
 def plan(config):
-    """Return (to_add, to_update, to_remove, unchanged) without touching disk state assumptions beyond reads."""
-    existing = existing_managed_units()
-    desired = set(config.keys())
-    to_remove = sorted(existing - desired)
     to_add, to_update, unchanged = [], [], []
     for name, entry in config.items():
         text = generate_unit(name, entry)
-        up = unit_path(name)
+        up = unit_path_for(name, entry)
         if not up.exists():
             to_add.append(name)
         elif up.read_text() != text:
             to_update.append(name)
         else:
             unchanged.append(name)
+
+    to_remove = []
+    desired_system = {n for n, e in config.items() if e.get("sudo", False)}
+    for n in existing_marked_units(SYSTEM_UNIT_DIR) - desired_system:
+        to_remove.append(Removal(n, "system", None))
+
+    users = {entry_user(e) for e in config.values() if not e.get("sudo", False)}
+    users.add(real_user())
+    for u in users:
+        desired_for_user = {
+            n for n, e in config.items() if not e.get("sudo", False) and entry_user(e) == u
+        }
+        for n in existing_marked_units(user_unit_dir(u)) - desired_for_user:
+            to_remove.append(Removal(n, "user", u))
+
     return sorted(to_add), sorted(to_update), to_remove, sorted(unchanged)
 
 
 def cmd_diff(args):
     config = load_config(config_path())
     to_add, to_update, to_remove, unchanged = plan(config)
+    remove_desc = [f"{r.name} ({r.kind}{', ' + r.user if r.user else ''})" for r in to_remove]
     print(f"Would add:     {to_add or 'none'}")
     print(f"Would update:  {to_update or 'none'}")
-    print(f"Would remove:  {to_remove or 'none'}")
+    print(f"Would remove:  {remove_desc or 'none'}")
     print(f"Unchanged:     {unchanged or 'none'}")
 
 
@@ -141,37 +226,61 @@ def cmd_sync(args):
         return
 
     to_add, to_update, to_remove, unchanged = plan(config)
-    changed = False
+    changed_system = False
+    changed_users = set()
 
     if to_remove:
         print("The following services are no longer in the config and will be stopped/removed:")
-        for n in to_remove:
-            print(f"  - {n}")
+        for r in to_remove:
+            print(f"  - {r.name} ({r.kind}{', ' + r.user if r.user else ''})")
         resp = input("Proceed with removal? [y/N] ").strip().lower()
         if resp == "y":
-            for n in to_remove:
-                subprocess.run(["systemctl", "disable", "--now", f"svc-{n}"], check=False)
-                unit_path(n).unlink(missing_ok=True)
-                changed = True
+            for r in to_remove:
+                if r.kind == "system":
+                    subprocess.run(["systemctl", "disable", "--now", f"svc-{r.name}"], check=False)
+                    system_unit_path(r.name).unlink(missing_ok=True)
+                    changed_system = True
+                else:
+                    user_systemctl(r.user, "disable", "--now", f"svc-{r.name}")
+                    user_unit_path(r.user, r.name).unlink(missing_ok=True)
+                    changed_users.add(r.user)
         else:
             print("Skipping removals.")
             to_remove = []
 
     for name in to_add + to_update:
-        unit_path(name).write_text(generate_unit(name, config[name]))
-        changed = True
+        entry = config[name]
+        text = generate_unit(name, entry)
+        if entry.get("sudo", False):
+            system_unit_path(name).write_text(text)
+            changed_system = True
+        else:
+            user = entry_user(entry)
+            write_as_user(user_unit_path(user, name), text, user)
+            changed_users.add(user)
 
-    if changed:
+    if changed_system:
         subprocess.run(["systemctl", "daemon-reload"], check=True)
+    for user in changed_users:
+        ensure_linger(user)
+        user_systemctl(user, "daemon-reload")
 
     for name in to_add:
-        subprocess.run(["systemctl", "enable", "--now", f"svc-{name}"], check=False)
+        entry = config[name]
+        if entry.get("sudo", False):
+            subprocess.run(["systemctl", "enable", "--now", f"svc-{name}"], check=False)
+        else:
+            user_systemctl(entry_user(entry), "enable", "--now", f"svc-{name}")
     for name in to_update:
-        subprocess.run(["systemctl", "restart", f"svc-{name}"], check=False)
+        entry = config[name]
+        if entry.get("sudo", False):
+            subprocess.run(["systemctl", "restart", f"svc-{name}"], check=False)
+        else:
+            user_systemctl(entry_user(entry), "restart", f"svc-{name}")
 
     print(f"Added:     {to_add or 'none'}")
     print(f"Updated:   {to_update or 'none'}")
-    print(f"Removed:   {to_remove or 'none'}")
+    print(f"Removed:   {[r.name for r in to_remove] or 'none'}")
     print(f"Unchanged: {unchanged or 'none'}")
 
 
@@ -182,19 +291,26 @@ def cmd_list(args):
         return
     to_add, to_update, to_remove, unchanged = plan(config)
     in_sync_names = set(unchanged)
-    print(f"{'NAME':<20} {'SUDO':<6} {'ACTIVE':<10} {'ENABLED':<10} {'IN SYNC'}")
+    print(f"{'NAME':<20} {'MODE':<8} {'USER':<10} {'ACTIVE':<10} {'ENABLED':<10} {'IN SYNC'}")
     for name, entry in sorted(config.items()):
-        sudo = str(entry.get("sudo", False)).lower()
-        active = subprocess.run(
-            ["systemctl", "is-active", f"svc-{name}"], capture_output=True, text=True
-        ).stdout.strip() or "unknown"
-        enabled = subprocess.run(
-            ["systemctl", "is-enabled", f"svc-{name}"], capture_output=True, text=True
-        ).stdout.strip() or "unknown"
+        sudo = entry.get("sudo", False)
+        user = entry_user(entry)
+        mode = "system" if sudo else "user"
+        if sudo:
+            active = subprocess.run(
+                ["systemctl", "is-active", f"svc-{name}"], capture_output=True, text=True
+            ).stdout.strip() or "unknown"
+            enabled = subprocess.run(
+                ["systemctl", "is-enabled", f"svc-{name}"], capture_output=True, text=True
+            ).stdout.strip() or "unknown"
+        else:
+            active = user_systemctl(user, "is-active", f"svc-{name}", capture=True).stdout.strip() or "unknown"
+            enabled = user_systemctl(user, "is-enabled", f"svc-{name}", capture=True).stdout.strip() or "unknown"
         in_sync = "yes" if name in in_sync_names else "no"
-        print(f"{name:<20} {sudo:<6} {active:<10} {enabled:<10} {in_sync}")
+        print(f"{name:<20} {mode:<8} {user:<10} {active:<10} {enabled:<10} {in_sync}")
     if to_remove:
-        print(f"\nManaged units with no config entry (run 'svc sync' to remove): {to_remove}")
+        remove_desc = [f"{r.name}({r.kind})" for r in to_remove]
+        print(f"\nManaged units with no config entry (run 'svc sync' to remove): {remove_desc}")
 
 
 def cmd_edit(args):
@@ -212,14 +328,30 @@ def cmd_edit(args):
 
 
 def cmd_passthrough(args):
-    if args.action in ("start", "stop", "restart"):
-        ensure_root()
-    result = subprocess.run(["systemctl", args.action, f"svc-{args.name}"])
+    config = load_config(config_path())
+    entry = config.get(args.name)
+    if entry is None:
+        print(f"Unknown service: {args.name} (not in {config_path()})")
+        sys.exit(1)
+    if entry.get("sudo", False):
+        if args.action in ("start", "stop", "restart"):
+            ensure_root()
+        result = subprocess.run(["systemctl", args.action, f"svc-{args.name}"])
+    else:
+        result = user_systemctl(entry_user(entry), args.action, f"svc-{args.name}")
     sys.exit(result.returncode)
 
 
 def cmd_logs(args):
-    cmd = ["journalctl", "-u", f"svc-{args.name}", "-n", "100"]
+    config = load_config(config_path())
+    entry = config.get(args.name)
+    if entry is None:
+        print(f"Unknown service: {args.name} (not in {config_path()})")
+        sys.exit(1)
+    cmd = ["journalctl"]
+    if not entry.get("sudo", False):
+        cmd.append("--user")
+    cmd += ["-u", f"svc-{args.name}", "-n", "100"]
     if not args.no_follow:
         cmd.append("-f")
     cmd.extend(args.extra)
