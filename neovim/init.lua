@@ -162,11 +162,25 @@ require("lazy").setup({
     tag = "0.1.8",
     dependencies = { "nvim-lua/plenary.nvim" },
     config = function()
+      local telescope = require("telescope")
       local builtin = require("telescope.builtin")
+
+      telescope.setup({
+        defaults = {
+          layout_strategy = "horizontal",
+          layout_config = {
+            horizontal = {
+              preview_width = 0.6,
+            },
+          },
+        },
+      })
+
       vim.keymap.set("n", "<leader>ff", builtin.find_files, { desc = "Telescope Find Files" })
       vim.keymap.set("n", "<leader>fg", builtin.live_grep, { desc = "Telescope Live Grep" })
       vim.keymap.set("n", "<leader>fb", builtin.buffers, { desc = "Telescope Buffers" })
       vim.keymap.set("n", "<leader>fh", builtin.help_tags, { desc = "Telescope Help Tags" })
+      vim.keymap.set("n", "<leader>?", builtin.keymaps, { desc = "Telescope Keymaps" })
     end,
   },
 
