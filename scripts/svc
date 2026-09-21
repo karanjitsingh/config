@@ -2,7 +2,7 @@
 """Declarative wrapper for managing custom systemd services.
 
 Source of truth: ~/.config/svc/services.toml
-Usage: svc sync | diff | list | edit | start|stop|restart|status <name> | logs <name> [...]
+Usage: svc sync | diff | list | edit | start|stop|restart|status|update <name> | logs <name> [...]
 
 sudo=true entries become system-level units (/etc/systemd/system), run as
 root. sudo=false entries become systemd --user units under the given
@@ -12,9 +12,11 @@ import argparse
 import collections
 import os
 import pwd
+import shlex
 import shutil
 import subprocess
 import sys
+import time
 import tomllib
 from pathlib import Path
 
@@ -26,25 +28,29 @@ DEFAULT_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
 
-EXAMPLE_CONFIG = """\
+CONFIG_HEADER_END = "# ---- end of svc header (managed by `svc edit`, do not edit above) ----\n"
+CONFIG_HEADER = """\
 # svc services config
 #
-# sudo=false -> runs as a systemd --user unit under `user` (no root needed
-#               to manage it). `user` defaults to whoever owns this file if
-#               omitted.
-# sudo=true  -> runs as a system-level unit, as root.
+# Fields per [service.<name>]:
+#   path     (required) working directory of the service
+#   command  (required) command to run, e.g. "node server.js"
+#   args     (optional) extra arguments appended to `command`; either a
+#                       string ("--port 8080") or a list (["--port", "8080"])
+#   sudo     (optional) false (default) -> systemd --user unit under `user`,
+#                       no root needed to manage it
+#                       true -> system-level unit, runs as root
+#   user     (optional) owner of the user unit; defaults to whoever owns
+#                       this file
 #
+# Example:
 # [service.myapp]
 # path = "/home/kj/apps/myapp"
 # command = "node server.js"
+# args = "--port 8080"
 # sudo = false
 # user = "kj"
-#
-# [service.webserver]
-# path = "/home/kj/apps/https-server"
-# command = "python3 serve.py --port 443"
-# sudo = true
-"""
+""" + CONFIG_HEADER_END + "\n"
 
 Removal = collections.namedtuple("Removal", "name kind user")
 
@@ -102,7 +108,11 @@ def unit_path_for(name, entry):
 
 def generate_unit(name, entry):
     path = entry["path"]
-    command = entry["command"].replace("'", "'\"'\"'")
+    command = entry["command"]
+    extra = entry.get("args", "")
+    if extra:
+        command += " " + (shlex.join(extra) if isinstance(extra, list) else extra)
+    command = command.replace("'", "'\"'\"'")
     sudo = entry.get("sudo", False)
     if sudo:
         # Mirrors what running `sudo <command>` as the real user would set,
@@ -313,11 +323,19 @@ def cmd_list(args):
         print(f"\nManaged units with no config entry (run 'svc sync' to remove): {remove_desc}")
 
 
+def ensure_config_header(path):
+    text = path.read_text() if path.exists() else ""
+    if text.startswith("# svc services config") and CONFIG_HEADER_END in text:
+        text = text.split(CONFIG_HEADER_END, 1)[1].lstrip("\n")
+    new = CONFIG_HEADER + text
+    if new != text:
+        path.write_text(new)
+
+
 def cmd_edit(args):
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text(EXAMPLE_CONFIG)
+    ensure_config_header(path)
     editor = os.environ.get("EDITOR") or next(
         (e for e in ("nvim", "vim", "nano") if shutil.which(e)), None
     )
@@ -340,6 +358,34 @@ def cmd_passthrough(args):
     else:
         result = user_systemctl(entry_user(entry), args.action, f"svc-{args.name}")
     sys.exit(result.returncode)
+
+
+def cmd_update(args):
+    config = load_config(config_path())
+    entry = config.get(args.name)
+    if entry is None:
+        print(f"Unknown service: {args.name} (not in {config_path()})")
+        sys.exit(1)
+    path = entry["path"]
+    user = entry_user(entry)
+    cmd = ["git", "-C", path, "pull"]
+    if os.getuid() != pwd.getpwnam(user).pw_uid:
+        cmd = ["sudo", "-u", user] + cmd
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+    print(f"Restarting {args.name}...")
+    since = time.strftime("%Y-%m-%d %H:%M:%S")
+    args.action = "restart"
+    try:
+        cmd_passthrough(args)
+    except SystemExit as e:
+        if e.code == 0:
+            print(f"Restarted {args.name}, startup logs:")
+            time.sleep(2)
+            jcmd = ["journalctl"] + ([] if entry.get("sudo", False) else ["--user"])
+            subprocess.run(jcmd + ["-u", f"svc-{args.name}", "--since", since, "--no-pager"])
+        raise
 
 
 def cmd_logs(args):
@@ -372,6 +418,10 @@ def main():
         p = sub.add_parser(action, help=f"systemctl {action} on a managed service")
         p.add_argument("name")
         p.set_defaults(func=cmd_passthrough, action=action)
+
+    p = sub.add_parser("update", help="git pull in a managed service's folder, then restart it")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_update)
 
     p = sub.add_parser("logs", help="tail logs for a managed service")
     p.add_argument("name")
