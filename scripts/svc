@@ -12,12 +12,15 @@ import argparse
 import collections
 import os
 import pwd
+import select
 import shlex
 import shutil
 import subprocess
 import sys
+import termios
 import time
 import tomllib
+import tty
 from pathlib import Path
 
 SYSTEM_UNIT_DIR = Path("/etc/systemd/system")
@@ -388,6 +391,31 @@ def cmd_update(args):
         raise
 
 
+def follow_until_q(cmd):
+    """Run cmd, letting 'q' quit like a pager would (journalctl disables its
+    own pager in --follow mode, so nothing else consumes the keypress)."""
+    proc = subprocess.Popen(cmd)
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while proc.poll() is None:
+            ready, _, _ = select.select([fd], [], [], 0.2)
+            if ready and os.read(fd, 1) == b"q":
+                proc.terminate()
+                break
+    except KeyboardInterrupt:
+        proc.terminate()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        proc.wait()
+    if proc.returncode in (0, -15):
+        return 0
+    if proc.returncode == -2:
+        return 130
+    return proc.returncode
+
+
 def cmd_logs(args):
     config = load_config(config_path())
     entry = config.get(args.name)
@@ -401,7 +429,12 @@ def cmd_logs(args):
     if not args.no_follow:
         cmd.append("-f")
     cmd.extend(args.extra)
-    result = subprocess.run(cmd)
+    if not args.no_follow and sys.stdin.isatty():
+        sys.exit(follow_until_q(cmd))
+    try:
+        result = subprocess.run(cmd)
+    except KeyboardInterrupt:
+        sys.exit(130)
     sys.exit(result.returncode)
 
 
