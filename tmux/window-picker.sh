@@ -2,10 +2,12 @@
 # Fuzzy window switcher across all sessions. Bound to `prefix + f` in .tmux.conf,
 # which runs it inside a display-popup.
 #
-# Each line carries three tab-separated fields:
+# Each line carries four tab-separated fields:
 #   1. tree form    -- windows indented under a session header
 #   2. flat form    -- every row tagged with `session:index`
 #   3. pane id      -- the switch-client target, never displayed
+#   4. kill target  -- session id for headers and solo windows, window id
+#                      otherwise; ctrl-x kills it after a y/N prompt
 #
 # fzf can only match against what it displays, so the two display forms are
 # swapped on the fly: the tree reads well while browsing, but as soon as there's
@@ -74,16 +76,43 @@ if [ "${1:-}" = "--preview" ]; then
     exit 0
 fi
 
+# ctrl-x runs this through fzf's execute(), which hands it the whole popup, so
+# the prompt takes over the screen until a key is pressed. Only ids are
+# accepted; names are looked up here purely for the question.
+if [ "${1:-}" = "--kill" ]; then
+    target=${2:-}
+    case "$target" in
+        \$*) kind=session
+             what="session '#{session_name}' (#{session_windows} window#{?#{==:#{session_windows},1},,s})" ;;
+        @*)  kind=window
+             what="window '#{session_name}:#{window_index} #{window_name}'" ;;
+        *) exit 0 ;;
+    esac
+
+    # Gone already, e.g. it closed while the picker was open. display-message
+    # doesn't fail on a stale id, it just expands to blanks, so check the id.
+    [ "$(tmux display -p -t "$target" "#{${kind}_id}" 2>/dev/null)" = "$target" ] || exit 0
+    what=$(tmux display -p -t "$target" "$what")
+
+    printf '\033[2J\033[H\n  %sKill %s?%s  %s[y/N]%s ' "$HDR" "$what" "$RST" "$DIM" "$RST"
+    read -rsn1 key
+    case "$key" in
+        y|Y) tmux "kill-$kind" -t "$target" ;;
+    esac
+    exit 0
+fi
+
 # Read once, up front, so the repeated --preview calls above never touch it.
+# --list is the reload after a kill; the file is long gone by then.
 here=""
-if [ -r "$FROM_FILE" ]; then
+if [ "${1:-}" != "--list" ] && [ -r "$FROM_FILE" ]; then
     here=$(cat "$FROM_FILE")
     rm -f "$FROM_FILE"
 fi
 
 list_windows() {
     tmux list-windows -a -F \
-        "#{pane_id}${TAB}#{session_name}${TAB}#{window_index}${TAB}#{window_name}${TAB}#{pane_current_command}${TAB}#{window_active}" |
+        "#{pane_id}${TAB}#{session_name}${TAB}#{window_index}${TAB}#{window_name}${TAB}#{pane_current_command}${TAB}#{window_active}${TAB}#{session_id}${TAB}#{window_id}" |
         awk -F"$TAB" \
             -v here="$here" \
             -v hdr="$HDR" -v dim="$DIM" -v rst="$RST" \
@@ -92,6 +121,7 @@ list_windows() {
         {
             n++
             pid[n] = $1; sess[n] = $2; idx[n] = $3; name[n] = $4; cmd[n] = $5
+            sid[$2] = $7; wid[n] = $8
             if (!($2 in count)) {
                 order[++sessions] = $2
                 current[$2] = $1          # fallback if no window reports active
@@ -123,7 +153,7 @@ list_windows() {
                     # otherwise be indistinguishable from a window row.
                     out[++rows] = hdr session rst tab \
                                   hdr session rst "  " dim "(session)" rst tab \
-                                  current[session]
+                                  current[session] tab sid[session]
                 }
                 for (i = 1; i <= n; i++) {
                     if (sess[i] != session) continue
@@ -133,7 +163,7 @@ list_windows() {
                     if (solo[i]) { tpad = hdr tpad rst; fpad = hdr fpad rst }
                     out[++rows] = sprintf(rowfmt, tpad, name[i], dim, cmd[i], rst) tab \
                                   sprintf(rowfmt, fpad, name[i], dim, cmd[i], rst) tab \
-                                  pid[i]
+                                  pid[i] tab (solo[i] ? sid[sess[i]] : wid[i])
                 }
             }
 
@@ -142,6 +172,12 @@ list_windows() {
         }
     '
 }
+
+# The reload after a kill wants the rows alone, without the active-row line.
+if [ "${1:-}" = "--list" ]; then
+    list_windows | tail -n +2
+    exit 0
+fi
 
 # Field 1 (tree) while the query is empty, field 2 (flat) once it isn't.
 retransform='transform:[ -n {q} ] && echo "change-with-nth(2)" || echo "change-with-nth(1)"'
@@ -168,6 +204,8 @@ fzf_args=(
     --bind "change:$retransform"
     --bind 'enter:clear-selection+accept'
     --bind 'tab:ignore,btab:ignore'
+    --bind "ctrl-x:execute('$SELF' --kill {4})+reload('$SELF' --list)"
+    --header="${DIM}ctrl-x: kill${RST}"
     --prompt='go> '
     --preview="'$SELF' --preview {3}"
     --preview-window='right,65%,border-left'
