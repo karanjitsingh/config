@@ -6,9 +6,11 @@
  * /q       — open queue in nvim / vim / nano for editing
  * /q clear — clear pending queue
  *
- * Steer: Enter sends the message immediately as a real-time interrupt. Sent
- *         steers appear in the widget as a read-only log (they cannot be
- *         deleted — they were already delivered).
+ * Steer: Enter sends the message immediately as a real-time interrupt. Steers
+ *         stay in the widget until they are actually delivered to the agent
+ *         (their user message enters the transcript), then clear. Steers that
+ *         never deliver (e.g. abort) clear at agent_end — pi restores those to
+ *         the editor because they were only queued, not sent.
  * Queue:  Enter adds to an internal list shown in a widget above the editor.
  *         Messages are sent after the agent finishes (not on abort).
  *         /q opens nvim to freely edit / reorder / delete queue items.
@@ -32,7 +34,7 @@ export default function (pi: ExtensionAPI) {
 	// Messages waiting to be sent after the agent finishes.
 	const pendingQueue: string[] = [];
 
-	// Steer messages sent during the current agent run (display only, cleared on agent_start).
+	// Steers queued this run but not yet delivered to the agent (cleared on delivery / agent_end).
 	const activeSteers: string[] = [];
 
 	let isEditing = false;
@@ -51,9 +53,9 @@ export default function (pi: ExtensionAPI) {
 
 		const lines: string[] = [];
 
-		// Sent steers this run
+		// Steers pending delivery this run
 		if (activeSteers.length > 0) {
-			lines.push(ctx.ui.theme.fg("warning", `⚡ Sent steers (${activeSteers.length}):`));
+			lines.push(ctx.ui.theme.fg("warning", `⚡ Steers (${activeSteers.length}) — pending delivery:`));
 			for (const msg of activeSteers) {
 				const firstLine = msg.split("\n")[0]!;
 				const preview = firstLine.length > 80 ? firstLine.slice(0, 77) + "…" : firstLine;
@@ -186,9 +188,9 @@ export default function (pi: ExtensionAPI) {
 						.filter((chunk) => chunk.length > 0);
 				}
 
-				// Steers are read-only: they were already delivered as real-time interrupts
-				// the moment Enter was pressed, so edits/deletions in the editor cannot
-				// un-send them. Only the Queue section is parsed back.
+				// The Steers section is informational only (steers still queued with the
+				// agent). Only the Queue section is parsed back — steers cannot be edited
+				// or un-queued from here.
 				const updated = parseSection("── Queue");
 
 				pendingQueue.length = 0;
@@ -216,6 +218,32 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		updateUI(ctx);
+	});
+
+	// ── Clear steers from the widget once they are delivered ───────────────────
+
+	// A queued steer is only delivered at the next turn boundary; no agent_start
+	// fires for the continuation, so the log would otherwise linger until the
+	// whole run ends. When the steer's user message enters the transcript it is
+	// visible in chat, so drop it from the widget. agent_end is the backstop for
+	// steers that never deliver (e.g. abort — pi restores those to the editor).
+	pi.on("message_start", async (event, ctx) => {
+		const msg = event.message;
+		if (msg.role !== "user") return;
+
+		const text =
+			typeof msg.content === "string"
+				? msg.content
+				: msg.content
+						.map((part) => (part.type === "text" ? part.text : ""))
+						.filter(Boolean)
+						.join("\n");
+
+		const idx = activeSteers.indexOf(text);
+		if (idx >= 0) {
+			activeSteers.splice(idx, 1);
+			updateUI(ctx);
+		}
 	});
 
 	// ── Clear steer log at the start of each agent run ────────────────────────
