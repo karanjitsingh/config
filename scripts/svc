@@ -40,6 +40,9 @@ CONFIG_HEADER = """\
 #   command  (required) command to run, e.g. "node server.js"
 #   args     (optional) extra arguments appended to `command`; either a
 #                       string ("--port 8080") or a list (["--port", "8080"])
+#   update   (optional) command run in `path` by `svc update` instead of the
+#                       default `git pull`; the service restarts only if it
+#                       exits 0
 #   sudo     (optional) false (default) -> systemd --user unit under `user`,
 #                       no root needed to manage it
 #                       true -> system-level unit, runs as root
@@ -371,10 +374,14 @@ def cmd_update(args):
         sys.exit(1)
     path = entry["path"]
     user = entry_user(entry)
-    cmd = ["git", "-C", path, "pull"]
+    update = entry.get("update")
+    if update:
+        cmd = ["bash", "-c", update]
+    else:
+        cmd = ["git", "-C", path, "pull"]
     if os.getuid() != pwd.getpwnam(user).pw_uid:
         cmd = ["sudo", "-u", user] + cmd
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, cwd=path)
     if result.returncode != 0:
         sys.exit(result.returncode)
     print(f"Restarting {args.name}...")
@@ -452,7 +459,7 @@ def main():
         p.add_argument("name")
         p.set_defaults(func=cmd_passthrough, action=action)
 
-    p = sub.add_parser("update", help="git pull in a managed service's folder, then restart it")
+    p = sub.add_parser("update", help="run the service's update command (default: git pull) in its folder, then restart it")
     p.add_argument("name")
     p.set_defaults(func=cmd_update)
 
