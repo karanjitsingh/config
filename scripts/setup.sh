@@ -21,5 +21,13 @@ else
         echo "$PATH_LINE"
     } >> "$ZSHRC"
     echo "✓ Added config/scripts to PATH in ~/.zshrc"
+    echo "ℹ  Run 'source ~/.zshrc' (or open a new terminal) to use them in your current shell"
 fi
+
+# Make the scripts available to this process and the rest of the setup run.
+# (Also covers `source setup.sh` invocations, where the export reaches the
+# caller's shell — a plain `bash setup.sh` child can't do that, and running
+# `source ~/.zshrc` from bash would choke on zsh-specific syntax.)
+export PATH="$HOME/code/config/scripts:$PATH"
+
 echo ""
