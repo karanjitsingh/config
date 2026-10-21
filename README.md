@@ -5,6 +5,7 @@ Personal config for Linux/macOS development machines.
 ## Contents
 
 - **neovim/** - Neovim config
+- **zsh/** - generic zsh config + powerlevel10k prompt
 - **tmux/** - tmux config, plugins, and the `claude-pane-track.sh` hook
 - **karabiner/** - Karabiner-Elements keyboard config (macOS only)
 - **pi/** - pi coding-agent settings, extensions, skills, themes
@@ -23,6 +24,8 @@ Each component's `setup.sh` symlinks its files into place, so edits here take ef
 
 ## Notes
 
+- **zsh:** `~/.zshrc` stays untracked (public remote) and sources `zsh/zshrc` first.
+  `~/.p10k.zsh` isn't tracked either — run `p10k configure` on a fresh machine.
 - **tmux-claude:** restoring Claude sessions needs `claude-pane-track.sh` registered
   by hand in `~/.claude/settings.json` under `SessionStart`, `UserPromptSubmit` and
   `SessionEnd` (absolute path, `jq` required):

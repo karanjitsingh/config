@@ -10,9 +10,14 @@ PATH_LINE='export PATH="$HOME/code/config/scripts:$PATH"'
 
 touch "$ZSHRC"
 
-# Match on the repo-relative suffix so this works whether the line uses
-# $HOME, ~, or an absolute path.
-if grep -qsF "code/config/scripts" "$ZSHRC"; then
+# zsh/zshrc exports the same PATH entry, so when that is wired up there is
+# nothing to do here. This module exists for machines that want the scripts
+# without the rest of the zsh config.
+#
+# The suffix match covers a line written as $HOME, ~, or an absolute path.
+if grep -qsF "config/zsh/zshrc" "$ZSHRC"; then
+    echo "✓ ~/.zshrc sources zsh/zshrc, which already puts config/scripts on PATH"
+elif grep -qsF "code/config/scripts" "$ZSHRC"; then
     echo "✓ ~/.zshrc already has config/scripts on PATH"
 else
     {

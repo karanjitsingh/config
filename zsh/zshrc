@@ -1,0 +1,69 @@
+# Generic zsh config, shared across every machine. ~/.zshrc sources this and then
+# adds whatever is specific to that machine.
+#
+# Source it from the TOP of ~/.zshrc. The powerlevel10k instant prompt below has
+# to run before anything writes to the terminal, so only code that may prompt for
+# input belongs above the source line.
+
+# --- powerlevel10k instant prompt ---------------------------------------------
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# --- PATH ---------------------------------------------------------------------
+# `./setup.sh scripts` writes this same line into ~/.zshrc for machines that want
+# the scripts on PATH without the rest of this file.
+export PATH="$HOME/code/config/scripts:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
+
+# --- completion ---------------------------------------------------------------
+# case-insensitive, then partial-word, then substring.
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+autoload -Uz compinit && compinit
+setopt nocaseglob
+
+# --- history ------------------------------------------------------------------
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+mkdir -p "$HOME/.zsh_history.d"
+# One history file per tmux pane, so concurrent panes don't interleave.
+if [ -n "$TMUX" ]; then
+    export HISTFILE="$HOME/.zsh_history.d/zsh_history_$(tmux display-message -p '#S:#W.#P')"
+else
+    export HISTFILE="$HOME/.zsh_history"
+fi
+
+# --- window title -------------------------------------------------------------
+set-title() {
+    echo -e "\e]0;$*\007"
+}
+
+# Title follows the host you're on, and reverts when the connection ends.
+ssh() {
+    set-title "$@"
+    /usr/bin/ssh -2 "$@"
+    set-title "$HOST"
+}
+
+# --- aliases ------------------------------------------------------------------
+alias e=emacs
+alias python='python3'
+alias mo=~/code/mo/mo
+
+# --- node ---------------------------------------------------------------------
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+
+# --- java ---------------------------------------------------------------------
+if command -v java >/dev/null 2>&1; then
+    export JAVA_HOME="$(dirname "$(dirname "$(realpath "$(command -v java)")")")"
+    export PATH="$JAVA_HOME/bin:$PATH"
+fi
+
+# --- prompt -------------------------------------------------------------------
+# Keep last: the theme sets PROMPT, so anything above it that does is discarded.
+# `./setup.sh zsh` clones this; without it you just get zsh's default prompt.
+P10K_THEME="$HOME/.local/share/powerlevel10k/powerlevel10k.zsh-theme"
+[ -r "$P10K_THEME" ] && source "$P10K_THEME"
+[ -r "$HOME/.p10k.zsh" ] && source "$HOME/.p10k.zsh"

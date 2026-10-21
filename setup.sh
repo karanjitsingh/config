@@ -13,7 +13,8 @@ show_usage() {
     echo "Commands:"
     echo "  all         Set up everything"
     echo "  neovim      Neovim config"
-    echo "  scripts     Standalone commands on PATH"
+    echo "  zsh         zsh + powerlevel10k, generic shell config"
+    echo "  scripts     Standalone commands on PATH (subset of zsh)"
     echo "  tmux        tmux config + plugins"
     echo "  karabiner   Karabiner-Elements config (macOS only)"
     echo "  pi          pi coding-agent"
@@ -28,8 +29,9 @@ fi
 
 for cmd in "$@"; do
     case "$cmd" in
-        all)        run neovim; run tmux; run karabiner; run pi; run claude; run scripts ;;
+        all)        run neovim; run zsh; run tmux; run karabiner; run pi; run claude ;;
         neovim)     run neovim ;;
+        zsh)        run zsh ;;
         scripts)    run scripts ;;
         tmux)       run tmux ;;
         karabiner)  run karabiner ;;
