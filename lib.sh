@@ -6,8 +6,17 @@ link_file() {
     local target=$2
     local name=$3
 
+    # Already pointing where we want it: nothing to do, and nothing to ask.
+    if [ -L "$target" ] && [ "$(readlink "$target")" = "$source" ]; then
+        echo "✓ $name already linked"
+        echo ""
+        return 0
+    fi
+
     if [ -f "$target" ] || [ -L "$target" ]; then
-        read -p "$target already exists. Overwrite? (y/n) " -n 1 -r
+        # `|| REPLY=n` because read returns non-zero on EOF, which under `set -e`
+        # would abort the whole setup instead of just skipping this file.
+        read -p "$target already exists. Overwrite? (y/n) " -n 1 -r || REPLY=n
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             ln -sf "$source" "$target"
