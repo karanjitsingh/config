@@ -195,6 +195,7 @@ fzf_args=(
     --ansi
     --reverse
     --sync
+    --tiebreak=index
     --multi
     --marker='▌'
     --color=marker:39
