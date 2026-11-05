@@ -110,14 +110,17 @@ function actBtn(label, title, onClick, extraClass = "") {
 }
 
 const editor = $("#editor");
-function openEditor({ heading, title = "", url = "", folder = false }) {
+function openEditor({ heading, title = "", url = "", emoji = "", folder = false }) {
   const f = editor.querySelector("form");
   const fTitle = f.elements.namedItem("title");
   const fUrl = f.elements.namedItem("url");
+  const fEmoji = f.elements.namedItem("emoji");
   $("#ed-heading").textContent = heading;
   fTitle.value = title;
   fUrl.value = url;
+  fEmoji.value = emoji;
   $("#ed-url-row").classList.toggle("hidden", folder);
+  $("#ed-emoji-row").classList.toggle("hidden", folder);
   editor.returnValue = "";
   editor.showModal();
   (folder || title ? fTitle : fUrl).select();
@@ -127,7 +130,9 @@ function openEditor({ heading, title = "", url = "", folder = false }) {
       const t = fTitle.value.trim();
       const u = normalizeUrl(fUrl.value);
       if (folder ? !t : !u) return resolve(null);
-      resolve({ title: t || hostOf(u), url: u });
+      const name = t || hostOf(u);
+      const e = folder ? "" : firstEmoji(fEmoji.value);
+      resolve({ title: e ? `${e} ${name}` : name, url: u });
     }, { once: true });
   });
 }
@@ -148,7 +153,7 @@ function toast(msg, undo) {
 
 async function removeLink(b, msg) {
   await bm.remove(b.id);
-  toast(`${msg} “${b.title}”`, () =>
+  toast(`${msg} “${splitIcon(b.title).name}”`, () =>
     bm.create({ parentId: b.parentId, index: b.index, title: b.title, url: b.url }));
 }
 
@@ -164,7 +169,8 @@ async function togglePin(b) {
 }
 
 async function editLink(b) {
-  const v = await openEditor({ heading: "Edit link", title: b.title, url: b.url });
+  const { emoji, name } = splitIcon(b.title);
+  const v = await openEditor({ heading: "Edit link", title: name, url: b.url, emoji });
   if (v) await bm.update(b.id, v);
 }
 
@@ -266,10 +272,14 @@ async function handleDrop(dt, parentId, index) {
 
 function linkNode(b, kind, parents) {
   const size = kind === "fav" ? 28 : 16;
+  const { emoji, name } = splitIcon(b.title);
+  const ico = emoji
+    ? el("i", { className: "emoji", style: `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.9)}px`, textContent: emoji })
+    : icon(b.url, size, name);
   const a = el("a", {
     href: b.url, className: kind, title: b.url, draggable: true,
     dataset: { id: b.id, index: b.index },
-  }, icon(b.url, size, b.title), el("span", { className: "label", textContent: b.title || hostOf(b.url) }));
+  }, ico, el("span", { className: "label", textContent: name || hostOf(b.url) }));
 
   const acts = el("span", { className: "acts" });
   if (kind === "fav") {
@@ -289,7 +299,7 @@ function linkNode(b, kind, parents) {
     e.dataTransfer.setData("text/uri-list", b.url);
     e.dataTransfer.effectAllowed = "copyMove";
   });
-  allLinks.push({ node: a, text: `${b.title} ${b.url}`.toLowerCase(), parents });
+  allLinks.push({ node: a, text: `${name} ${b.url}`.toLowerCase(), parents });
   return a;
 }
 

@@ -296,4 +296,7 @@ body.popup { width: 280px; padding: 12px; }
 .popup #list button:hover { background: var(--hover); }
 .popup #status { color: var(--accent); font-size: 12px; padding: 6px 4px 0; min-height: 18px; }
 
+.emoji { display: grid; place-items: center; flex: none; font-style: normal; line-height: 1; }
+dialog label .hint { opacity: .7; margin-left: 4px; }
+
 .hidden { display: none !important; }

@@ -60,6 +60,16 @@ const loadLayout = () => navigator.locks.request("home-layout", ensureLayout);
 const favicon = (url, size) =>
   `/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${size}`;
 
+// Custom icons live in the bookmark title itself: "🚀 Taskei" → { emoji: "🚀", name: "Taskei" }.
+const EMOJI_RE = /^(\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic}\uFE0F?)*)/u;
+function splitIcon(title = "") {
+  const m = title.match(EMOJI_RE);
+  if (!m || !/^\s/.test(title.slice(m[1].length))) return { emoji: "", name: title };
+  return { emoji: m[1], name: title.slice(m[1].length).trim() };
+}
+// Returns the emoji if `s` starts with one, else "".
+const firstEmoji = s => (s.trim().match(EMOJI_RE) || [""])[0];
+
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 }
