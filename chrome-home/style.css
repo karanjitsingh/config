@@ -85,7 +85,7 @@ header { text-align: center; margin-bottom: 24px; }
 body.dragging-section .col { padding-bottom: 48px; min-height: 80px; }
 @media (max-width: 760px) { #sections { grid-template-columns: 1fr; } }
 .card {
-  padding: 14px 10px 10px;
+  padding: 12px 10px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -122,8 +122,18 @@ summary {
   font-weight: 500;
   list-style: none;
 }
-summary::before { content: "▸"; display: inline-block; width: 16px; transition: transform .1s; }
-details[open] > summary::before { transform: rotate(90deg); }
+summary::before, .card-head h2::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin: 0 7px 0 3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);          /* points right (collapsed) */
+  transition: transform .12s;
+}
+details[open] > summary::before { transform: rotate(45deg); } /* points down (open) */
 summary:hover { background: var(--hover); }
 details > .group { padding-left: 14px; }
 
@@ -154,8 +164,7 @@ details > .group { padding-left: 14px; }
 }
 .link .acts, summary .acts { background: linear-gradient(to right, transparent, var(--hover) 12px); }
 .card-head .acts { background: linear-gradient(to right, transparent, var(--card) 12px); }
-.link:hover .acts, .card-head:hover .acts, summary:hover .acts, .fav:hover .acts { visibility: visible; }
-.fav .acts { top: 3px; right: 3px; transform: none; padding-left: 0; }
+.link:hover .acts, .card-head:hover .acts, summary:hover .acts { visibility: visible; }
 .act {
   border: 0;
   background: transparent;
@@ -181,8 +190,8 @@ summary { display: flex; align-items: center; gap: 6px; }
 
 /* ---- collapsible sections ---- */
 .card-head { cursor: pointer; user-select: none; }
-.card-head h2::before { content: "▾"; display: inline-block; width: 14px; }
-.card.collapsed .card-head h2::before { content: "▸"; }
+.card-head h2 { display: flex; align-items: center; }
+.card:not(.collapsed) .card-head h2::before { transform: rotate(45deg); }
 .card.collapsed .body { display: none; }
 .card.collapsed .card-head { margin-bottom: 0; }
 .card.dragging { opacity: .4; }
@@ -300,5 +309,32 @@ body.popup { width: 280px; padding: 12px; }
 
 .emoji { display: grid; place-items: center; flex: none; font-style: normal; line-height: 1; }
 dialog label .hint { opacity: .7; margin-left: 4px; }
+
+#ctxmenu {
+  position: fixed;
+  z-index: 10;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .14);
+}
+#ctxmenu button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+#ctxmenu button:hover, #ctxmenu button:focus-visible { background: var(--hover); }
+#ctxmenu button.danger { color: #d64545; }
 
 .hidden { display: none !important; }

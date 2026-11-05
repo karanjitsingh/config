@@ -138,6 +138,29 @@ function openEditor({ heading, title = "", url = "", emoji = "", folder = false 
   });
 }
 
+// ---------- context menu ----------
+const menu = el("div", { id: "ctxmenu", className: "hidden", role: "menu" });
+document.body.append(menu);
+const hideMenu = () => menu.classList.add("hidden");
+
+function showMenu(x, y, items) {
+  menu.replaceChildren(...items.map(([label, fn, cls = ""]) => {
+    const b = el("button", { type: "button", className: cls, textContent: label, role: "menuitem" });
+    b.addEventListener("click", () => { hideMenu(); fn(); });
+    return b;
+  }));
+  menu.classList.remove("hidden");
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
+  menu.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
+  menu.querySelector("button").focus();
+}
+document.addEventListener("mousedown", e => { if (!menu.contains(e.target)) hideMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideMenu(); });
+addEventListener("blur", hideMenu);
+addEventListener("scroll", hideMenu, true);
+addEventListener("resize", hideMenu);
+
 let toastTimer;
 function toast(msg, undo) {
   const t = $("#toast");
@@ -284,8 +307,15 @@ function linkNode(b, kind, parents) {
 
   const acts = el("span", { className: "acts" });
   if (kind === "fav") {
-    acts.append(actBtn("✎", "Edit", () => editLink(b)),
-                actBtn("✕", "Unpin", () => removeLink(b, "Unpinned")));
+    // Tiles stay clean: actions live in a right-click menu instead of hover buttons.
+    a.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      showMenu(e.clientX, e.clientY, [
+        ["Open in new tab", () => window.open(b.url, "_blank")],
+        ["Edit", () => editLink(b)],
+        ["Unpin", () => removeLink(b, "Unpinned"), "danger"],
+      ]);
+    });
   } else {
     const pinned = state.pinned.has(b.url);
     acts.append(actBtn(pinned ? "★" : "☆", pinned ? "Unpin from favorites" : "Pin to favorites",
