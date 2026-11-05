@@ -18,6 +18,7 @@ Personal config for Linux/macOS development machines.
 ./setup.sh all        # everything
 ./setup.sh tmux pi    # or pick components
 ./setup.sh --help     # list components
+./setup.sh karabiner amzn  # work variant (karabiner/karabiner.amzn.json)
 ```
 
 Each component's `setup.sh` symlinks its files into place, so edits here take effect immediately.
