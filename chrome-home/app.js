@@ -76,6 +76,7 @@ function placeNewSections(sections, archiveId) {
 const rows = f => (f.children || []).length;
 
 function moveSection(id, colIndex, beforeId) {
+  document.body.classList.remove("dragging-section"); // the dragged node is re-rendered, so dragend may not fire
   layout.cols.forEach(c => { const i = c.indexOf(id); if (i !== -1) c.splice(i, 1); });
   const col = layout.cols[colIndex];
   const i = beforeId ? col.indexOf(beforeId) : -1;
@@ -357,8 +358,13 @@ function cardNode(f, opts = {}) {
     e.dataTransfer.setData(SECTION_TYPE, f.id);
     e.dataTransfer.effectAllowed = "move";
     card.classList.add("dragging");
+    document.body.classList.add("dragging-section");
   });
-  head.addEventListener("dragend", () => { card.classList.remove("dragging"); clearDropMarks(); });
+  head.addEventListener("dragend", () => {
+    card.classList.remove("dragging");
+    document.body.classList.remove("dragging-section");
+    clearDropMarks();
+  });
   card.classList.toggle("collapsed", layout.collapsed.has(f.id));
   return card;
 }

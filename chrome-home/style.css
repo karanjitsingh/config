@@ -28,7 +28,7 @@ body {
   color: var(--text);
   font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
 }
-main { max-width: 1180px; margin: 0 auto; padding: 56px 32px 64px; }
+main { max-width: 1180px; margin: 0 auto; padding: 56px 32px 28px; }
 a { color: inherit; text-decoration: none; }
 
 header { text-align: center; margin-bottom: 24px; }
@@ -80,7 +80,9 @@ header { text-align: center; margin-bottom: 24px; }
   gap: 18px;
   align-items: stretch; /* every column spans the full height, so space below the last card is droppable */
 }
-.col { display: flex; flex-direction: column; gap: 18px; min-height: 80px; padding-bottom: 48px; border-radius: 14px; }
+.col { display: flex; flex-direction: column; gap: 18px; border-radius: 14px; }
+/* Extra drop room under the columns only while a section is being dragged. */
+body.dragging-section .col { padding-bottom: 48px; min-height: 80px; }
 @media (max-width: 760px) { #sections { grid-template-columns: 1fr; } }
 .card {
   padding: 14px 10px 10px;
