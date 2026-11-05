@@ -503,9 +503,11 @@ let matches = [];
 let selected = 0;
 let filtering = false;
 
-function parseShortcut(q) {
-  const m = q.match(/^(\S+)\s+(.+)$/);
-  return m && SEARCH[m[1]] ? { engine: SEARCH[m[1]], query: m[2] } : null;
+// "<key> <query>" → search mode as soon as the space is typed (query may still be empty).
+// Takes the raw input value: trimming would hide the space that switches modes.
+function parseShortcut(raw) {
+  const m = raw.trimStart().match(/^(\S+)\s+(.*)$/s);
+  return m && SEARCH[m[1]] ? { engine: SEARCH[m[1]], query: m[2].trim() } : null;
 }
 
 function setSelected(i) {
@@ -519,7 +521,7 @@ function setSelected(i) {
 
 function applyFilter() {
   const q = input.value.trim();
-  const sc = parseShortcut(q);
+  const sc = parseShortcut(input.value);
   filtering = Boolean(q && !sc);
 
   document.querySelectorAll(".card, details").forEach(n => n.classList.remove("hidden"));
@@ -547,7 +549,11 @@ function applyFilter() {
 
   const h = $("#hint");
   if (sc) {
-    h.replaceChildren("Enter to search ", el("b", { textContent: sc.engine.name }), ` for “${sc.query}”`);
+    h.replaceChildren(...(sc.query
+      ? ["Enter to search ", el("b", { textContent: sc.engine.name }), ` for “${sc.query}”`]
+      : ["Search ", el("b", { textContent: sc.engine.name }), ": type your query"]));
+  } else if (SEARCH[q]) {
+    h.replaceChildren("Space to search ", el("b", { textContent: SEARCH[q].name }));
   } else if (filtering) {
     h.textContent = matches.length
       ? `${matches.length} match${matches.length > 1 ? "es" : ""} · ↑↓ move · Enter open · ⌘Enter new tab`
@@ -573,7 +579,8 @@ input.addEventListener("keydown", e => {
   } else if (e.key === "Enter" && q) {
     e.preventDefault();
     const newTab = e.metaKey || e.ctrlKey;
-    const sc = parseShortcut(q);
+    const sc = parseShortcut(input.value);
+    if (sc && !sc.query) return;
     if (sc) return go(sc.engine.url.replace("%s", encodeURIComponent(sc.query)), newTab);
     if (matches[selected]) return go(matches[selected].node.href, newTab);
     go(SEARCH.g.url.replace("%s", encodeURIComponent(q)), newTab);

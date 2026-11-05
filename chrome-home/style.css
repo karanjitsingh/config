@@ -22,6 +22,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Reserve scrollbar space on both sides so centered content doesn't jump when
+   filtering/collapsing makes the page short enough for the scrollbar to vanish. */
+html { scrollbar-gutter: stable both-edges; }
 body {
   margin: 0;
   background: var(--bg);
