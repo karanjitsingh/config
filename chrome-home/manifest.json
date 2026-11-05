@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Home",
+  "version": "3.0",
+  "description": "New tab page built from your bookmarks, with pinning.",
+  "permissions": ["bookmarks", "favicon", "storage", "activeTab"],
+  "chrome_url_overrides": { "newtab": "index.html" },
+  "action": {
+    "default_title": "Pin to Home",
+    "default_popup": "popup.html"
+  }
+}

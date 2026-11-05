@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Home</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div id="clock"></div>
+      <div id="date"></div>
+    </header>
+    <div id="search-wrap">
+      <input id="search" type="text" autocomplete="off" spellcheck="false" autofocus
+             placeholder="Filter links, or type a search shortcut">
+      <div id="hint"></div>
+    </div>
+    <nav id="favorites"></nav>
+    <section id="sections"></section>
+    <div id="footer">
+      <button id="add-section" type="button">+ New section</button>
+      <span id="col-ctrl">Columns
+        <button id="col-minus" type="button" title="Fewer columns">−</button>
+        <b id="col-count"></b>
+        <button id="col-plus" type="button" title="More columns">+</button>
+      </span>
+      <a id="manage" href="#">Open in bookmark manager</a>
+    </div>
+  </main>
+
+  <dialog id="editor">
+    <form method="dialog">
+      <h3 id="ed-heading"></h3>
+      <label>Name <input name="title" autocomplete="off"></label>
+      <label id="ed-url-row">URL <input name="url" autocomplete="off" spellcheck="false"></label>
+      <menu>
+        <button value="ok" class="primary">Save</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" class="hidden"><span></span><button type="button">Undo</button></div>
+
+  <script src="config.js"></script>
+  <script src="config.local.js"></script>
+  <script src="config.merge.js"></script>
+  <script src="shared.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
