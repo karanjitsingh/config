@@ -6,6 +6,7 @@ session that lived in a pane: a restored pane runs the shell again, and `claude`
 there starts a fresh conversation. This finds the session id that belongs to each
 pane and types the `claude --resume <id>` back in.
 
+    tmux-claude install            wire the tracking hook into claude's settings
     tmux-claude list [session]     what each pane holds, or used to hold
     tmux-claude restore            the current window
     tmux-claude restore <session>  every pane in that tmux session
@@ -16,11 +17,19 @@ restore types the command in without pressing Enter; --run presses it.
 
 Four matchers, best first. Each one is needed somewhere:
 
+  live           the claude running in the pane right now, read off its command
+                 line. Only names a session when the pane was started as
+                 `claude --resume <uuid>`: a bare `claude` does not carry its id,
+                 and `--fork-session` carries its *parent's*, so both defer to the
+                 registry rather than reporting a wrong or missing id.
   registry/pane  ~/.tmux/claude-panes.jsonl written by claude-pane-track.sh, keyed
                  on pane id. A pane id survives renames, reordering and moving a
                  pane between windows, but is reissued by a new tmux server, so it
                  is only trusted when the record's server pid is the running one.
-  registry/coord same file, keyed on session:window.pane plus cwd. Survives reboots.
+  registry/coord same file, keyed on session:window.pane. Survives reboots. The
+                 record's cwd is carried along, not matched on: it is what restore
+                 has to cd into, since `claude --resume` resolves a session inside
+                 the project directory it was started in.
   saved          resurrect stores each pane's *full* command, so a pane started as
                  `claude --resume <uuid>` already has its id in its save file.
   title          claude sets the pane title to its ai-title, resurrect restores
@@ -37,6 +46,8 @@ import glob
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -47,7 +58,13 @@ REGISTRY = os.environ.get(
 )
 PROJECTS = os.path.expanduser("~/.claude/projects")
 HISTORY = os.path.expanduser("~/.claude/history.jsonl")
+SETTINGS = os.path.expanduser("~/.claude/settings.json")
 RESURRECT = os.path.expanduser("~/.local/share/tmux/resurrect")
+# The stable path `./setup.sh tmux` links into place, not the repo file it points
+# at: settings.json takes an absolute path (claude does not expand ~) and should
+# not bake in where this repo happens to be cloned.
+TRACKER = os.path.expanduser("~/.tmux/claude-pane-track.sh")
+HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "SessionEnd")
 SHELLS = {"zsh", "bash", "sh", "fish", "dash"}
 UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 TAB = "\t"
@@ -150,23 +167,71 @@ def age(ms):
 
 # --- matchers ---------------------------------------------------------------
 
+_ptable = None
+
+
+def ptable():
+    """(argv by pid, child pids by ppid) for every process, in one ps.
+
+    One read beats a pgrep per pane, and it is the only form that works on both
+    boxes: /proc does not exist on macOS, and `pgrep -P <ppid>` prints nothing
+    there unless -l is also passed, so the old per-pane probe found no claude at
+    all on the mac and every pane came back idle.
+    """
+    global _ptable
+    if _ptable is None:
+        argv, kids = {}, {}
+        out = subprocess.run(["ps", "-axww", "-o", "pid=,ppid=,command="],
+                             capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            f = line.split(None, 2)
+            if len(f) < 3:
+                continue
+            argv[f[0]] = f[2]
+            kids.setdefault(f[1], []).append(f[0])
+        _ptable = (argv, kids)
+    return _ptable
+
+
 def live_session(pane):
-    """Session id of the claude currently running in this pane, if it shows one."""
-    if pane["command"] != "claude":
-        return None
-    out = subprocess.run(["pgrep", "-P", pane["pane_pid"], "-x", "claude"],
-                         capture_output=True, text=True).stdout.split()
-    for pid in out:
-        try:
-            with open("/proc/%s/cmdline" % pid, "rb") as fh:
-                cmd = fh.read().decode(errors="replace").replace("\0", " ")
-        except OSError:
-            continue
-        m = re.search(r"--resume\s+(" + UUID + ")", cmd)
-        if m:
-            return m.group(1)
-        return ""  # bare `claude`: running, id not knowable from the cmdline
-    return None
+    """(running, session_id) for the claude that owns this pane.
+
+    `running` says a claude holds the pane; `session_id` is filled only when its
+    command line names one. Two shapes deliberately report None instead:
+
+      bare `claude`     started without --resume, so the id it minted is nowhere
+                        on the command line. The old code stopped here and the
+                        pane listed no session at all, even though the hook had
+                        already recorded exactly which one it is.
+      --fork-session    the uuid on the command line is the *parent* -- a fork
+                        gets a fresh id -- so resuming it would reopen the wrong
+                        conversation.
+
+    Both fall through to the registry, which holds the id that is actually live.
+
+    A pane sitting at its shell prompt is not probed at all; anything else is
+    searched breadth-first from the pane's own process, because how deep claude
+    sits varies: on the dev box the pane shell spawns `claude` directly, on the
+    mac a `toolbox-exec` shim sits in between, and an exec'd launcher makes the
+    pane process itself the one to read. Shallowest match wins -- the deeper
+    processes are the same invocation re-execed, while a *nested* claude from a
+    Bash tool call is deeper still and must not be mistaken for the pane's own.
+    """
+    if pane["command"] in SHELLS:
+        return False, None
+    argv, kids = ptable()
+    queue = [(pane["pane_pid"], 0)]
+    while queue:
+        pid, depth = queue.pop(0)
+        cmd = argv.get(pid, "")
+        if cmd and os.path.basename(cmd.split(" ")[0]) == "claude":
+            if "--fork-session" in cmd:
+                return True, None
+            m = re.search(r"--resume\s+(" + UUID + ")", cmd)
+            return True, (m.group(1) if m else None)
+        if depth < 3:
+            queue.extend((k, depth + 1) for k in kids.get(pid, []))
+    return False, None
 
 
 def load_registry():
@@ -279,14 +344,11 @@ def title_index():
     return _titles
 
 
-def resolve(pane, reg_pane, reg_coord, spid):
-    """Best candidate for a pane: dict(session_id, source, note, alternates)."""
-    running = live_session(pane)
-    if running:
-        return {"session_id": running, "source": "live", "note": "", "alternates": []}
-    if running == "":
-        return {"session_id": None, "source": "live", "note": "bare claude, id unknown",
-                "alternates": []}
+def resolve(pane, reg_pane, reg_coord, spid, running, sid):
+    """Best candidate for a pane: dict(session_id, source, note, alternates, cwd)."""
+    if sid:
+        return {"session_id": sid, "source": "live", "note": "", "alternates": [],
+                "cwd": ""}
 
     recs = reg_pane.get((spid, pane["pane_id"]))
     source = "registry/pane"
@@ -304,13 +366,14 @@ def resolve(pane, reg_pane, reg_coord, spid):
             note = "cwd moved"
         if sid and transcript_of(sid):
             return {"session_id": sid, "source": source, "note": note,
-                    "alternates": alts}
+                    "alternates": alts, "cwd": rec.get("cwd") or ""}
 
     sid = saved_commands().get(
         (pane["tmux_session"], pane["window_index"], pane["pane_index"])
     )
     if sid and transcript_of(sid):
-        return {"session_id": sid, "source": "saved", "note": "", "alternates": []}
+        return {"session_id": sid, "source": "saved", "note": "", "alternates": [],
+                "cwd": ""}
 
     title = strip_marker(pane["title"])
     if title and title != pane["title"]:  # a title claude actually set
@@ -318,13 +381,18 @@ def resolve(pane, reg_pane, reg_coord, spid):
         hits.sort(key=lambda s: history().get(s, {}).get("last", 0), reverse=True)
         if len(hits) == 1:
             return {"session_id": hits[0], "source": "title", "note": "",
-                    "alternates": []}
+                    "alternates": [], "cwd": ""}
         if hits:
             return {"session_id": hits[0], "source": "title",
                     "note": "ambiguous, %d share this title" % len(hits),
-                    "alternates": hits[1:]}
+                    "alternates": hits[1:], "cwd": ""}
         return {"session_id": None, "source": "title",
-                "note": "no transcript for title", "alternates": []}
+                "note": "no transcript for title", "alternates": [], "cwd": ""}
+    if running:
+        # A claude is here but nothing knows which session: the hook is not
+        # installed, or this pane predates it.
+        return {"session_id": None, "source": "live",
+                "note": "running, id not recorded", "alternates": [], "cwd": ""}
     return None
 
 
@@ -335,8 +403,10 @@ def rows_for(scope):
     reg_pane, reg_coord = load_registry()
     out = []
     for pane in panes(scope):
-        cand = resolve(pane, reg_pane, reg_coord, spid)
+        running, sid = live_session(pane)
+        cand = resolve(pane, reg_pane, reg_coord, spid, running, sid)
         if cand:
+            cand["running"] = running
             out.append((pane, cand))
     # A session id belongs to its most recent claim only: after a crash leaves no
     # SessionEnd, an old pane keeps listing a session that now lives elsewhere.
@@ -372,7 +442,7 @@ def do_list(scope):
             topic = "%s  [%s]" % (topic, c["note"])
         table.append((
             coord(pane), pane["window_name"],
-            "running" if pane["command"] == "claude" else "idle",
+            "running" if c["running"] else "idle",
             c["source"], age(h.get("last")), str(h.get("turns", "-")),
             sid or "-", topic,
         ))
@@ -406,7 +476,7 @@ def do_restore(scope, press_enter, force):
     sent = []
     for pane, c in rows:
         sid, note = c["session_id"], c["note"]
-        if c["source"] == "live":
+        if c["running"]:
             print("skip %-12s already running claude" % coord(pane))
             continue
         if not sid:
@@ -418,7 +488,14 @@ def do_restore(scope, press_enter, force):
         if (c.get("stale") or "ambiguous" in note or "closed" in note) and not force:
             print("skip %-12s %s (--force to include)" % (coord(pane), note))
             continue
-        send(pane, "claude --resume %s" % sid, press_enter)
+        # `claude --resume <uuid>` looks the session up under the project directory
+        # it is started in, so a pane whose cwd drifted -- resurrect restoring a
+        # path that has since moved, or a pane the shell cd'd out of -- would be
+        # told there is no such conversation. Go back first when the record says so.
+        cmd = "claude --resume %s" % sid
+        if c["cwd"] and c["cwd"] != pane["cwd"] and os.path.isdir(c["cwd"]):
+            cmd = "cd %s && %s" % (shlex.quote(c["cwd"]), cmd)
+        send(pane, cmd, press_enter)
         h = history().get(sid, {})
         print("%-9s %-12s %s  %s" % (
             "resumed" if press_enter else "prefilled", coord(pane), sid,
@@ -434,13 +511,14 @@ def do_scan():
     """Record what is running right now, straight from the process table."""
     spid = server_pid()
     written = 0
+    os.makedirs(os.path.dirname(REGISTRY), exist_ok=True)
     with open(REGISTRY, "a") as fh:
         for pane in panes("all"):
-            sid = live_session(pane)
+            running, sid = live_session(pane)
             if not sid:
-                if sid == "":
-                    print("unresolved %-12s bare claude, no id in cmdline"
-                          % coord(pane))
+                if running:
+                    print("unresolved %-12s running, but no id on its cmdline "
+                          "(bare claude or a fork)" % coord(pane))
                 continue
             rec = {
                 "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -458,11 +536,80 @@ def do_scan():
     print("%d pane(s) recorded in %s" % (written, REGISTRY))
 
 
+def do_install():
+    """Link the tracker into ~/.tmux and register it in claude's settings. Kept
+    out of `./setup.sh tmux` on purpose: tracking is opt-in.
+
+    Idempotent. An entry that names claude-pane-track.sh under some other path is
+    repointed rather than duplicated, because two live entries would write every
+    record twice.
+    """
+    src = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                       os.pardir, "tmux", "claude-pane-track.sh")
+    src = os.path.normpath(src)
+    if not os.path.exists(src):
+        sys.exit("%s is not there -- is this script still in the config repo?" % src)
+    if os.path.realpath(TRACKER) != src:
+        os.makedirs(os.path.dirname(TRACKER), exist_ok=True)
+        if os.path.lexists(TRACKER):
+            os.remove(TRACKER)
+        os.symlink(src, TRACKER)
+        print("linked %s -> %s" % (TRACKER, src))
+    if not shutil.which("jq"):
+        print("warning: jq is not on PATH; the hook exits silently without it,\n"
+              "         which looks exactly like not being registered at all")
+    os.makedirs(os.path.dirname(REGISTRY), exist_ok=True)
+
+    try:
+        with open(SETTINGS) as fh:
+            cfg = json.load(fh)
+    except FileNotFoundError:
+        cfg = {}
+    except ValueError as e:
+        sys.exit("%s is not valid json (%s) -- fix that first" % (SETTINGS, e))
+
+    name = os.path.basename(TRACKER)
+    hooks = cfg.setdefault("hooks", {})
+    changed = []
+    for event in HOOK_EVENTS:
+        entries = hooks.setdefault(event, [])
+        found = False
+        for entry in entries:
+            for h in entry.get("hooks", []):
+                if os.path.basename(h.get("command", "")) != name:
+                    continue
+                found = True
+                if h["command"] != TRACKER:
+                    h["command"] = TRACKER
+                    changed.append(event + " (repointed)")
+        if not found:
+            entries.append({"hooks": [
+                {"type": "command", "command": TRACKER, "async": True}]})
+            changed.append(event)
+
+    if not changed:
+        print("already wired into %s for %s" % (SETTINGS, ", ".join(HOOK_EVENTS)))
+        return
+    os.makedirs(os.path.dirname(SETTINGS), exist_ok=True)
+    if os.path.exists(SETTINGS):
+        shutil.copy2(SETTINGS, SETTINGS + ".bak")
+        print("backed up %s.bak" % SETTINGS)
+    tmp = SETTINGS + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(cfg, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, SETTINGS)
+    print("wired %s into %s" % (", ".join(changed), SETTINGS))
+    print("already-running claude sessions keep the old hooks until they restart;\n"
+          "`tmux-claude scan` records the ones started with --resume in the meantime")
+
+
 def main():
     ap = argparse.ArgumentParser(
         prog="tmux-claude", description=__doc__.split("\n\n")[1],
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("action", nargs="?", choices=["list", "restore", "scan"])
+    ap.add_argument("action", nargs="?",
+                    choices=["install", "list", "restore", "scan"])
     ap.add_argument("target", nargs="?",
                     help="tmux session name, or 'all'. restore with no target "
                          "means the current window")
@@ -473,6 +620,10 @@ def main():
 
     if not args.action:
         ap.print_help()
+        return
+
+    if args.action == "install":
+        do_install()  # the only action that does not need a running server
         return
 
     if not tmux("list-sessions"):

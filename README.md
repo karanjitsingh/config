@@ -6,7 +6,7 @@ Personal config for Linux/macOS development machines.
 
 - **neovim/** - Neovim config
 - **zsh/** - generic zsh config + powerlevel10k prompt
-- **tmux/** - tmux config, plugins, and the `claude-pane-track.sh` hook
+- **tmux/** - tmux config, plugins, and the opt-in `claude-pane-track.sh` hook
 - **karabiner/** - Karabiner-Elements keyboard config (macOS only)
 - **pi/** - pi coding-agent settings, extensions, skills, themes
 - **claude/** - Claude Code statusline
@@ -27,10 +27,6 @@ Each component's `setup.sh` symlinks its files into place, so edits here take ef
 
 - **zsh:** `~/.zshrc` stays untracked (public remote) and sources `zsh/zshrc` first.
   `~/.p10k.zsh` isn't tracked either — run `p10k configure` on a fresh machine.
-- **tmux-claude:** restoring Claude sessions needs `claude-pane-track.sh` registered
-  by hand in `~/.claude/settings.json` under `SessionStart`, `UserPromptSubmit` and
-  `SessionEnd` (absolute path, `jq` required):
-
-  ```json
-  { "type": "command", "command": "/home/<you>/.tmux/claude-pane-track.sh", "async": true }
-  ```
+- **tmux-claude:** opt-in, not part of `./setup.sh tmux`. Run `tmux-claude install`
+  to link `claude-pane-track.sh` into `~/.tmux` and register it in
+  `~/.claude/settings.json` (`jq` required).
