@@ -88,7 +88,8 @@ function editRow(key, { name = "", url = "" } = {}) {
       : null;
     if (problem) { err.textContent = problem; return; }
     // Keep the list order: replace in place when editing.
-    const entries = Object.entries(SEARCH).map(([kk, v]) => kk === key ? [k, { name: fName.value.trim() || k, url: u }] : [kk, v]);
+    // Spread first so extra fields (like `direct`) survive an edit.
+    const entries = Object.entries(SEARCH).map(([kk, v]) => kk === key ? [k, { ...v, name: fName.value.trim() || k, url: u }] : [kk, v]);
     if (!key) entries.push([k, { name: fName.value.trim() || k, url: u }]);
     await saveShortcuts(Object.fromEntries(entries));
     close();

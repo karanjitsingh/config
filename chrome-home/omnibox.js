@@ -219,8 +219,9 @@
         if (!s) continue;
         const score = s * (1 + frecency(h));
         const ex = byQuery.get(ql);
-        if (!ex || score > ex.score) byQuery.set(ql, { query, title: h.title, score, h });
-        else ex.score += score * 0.25; // repeated searches rank higher
+        const urls = [...(ex?.urls || []), h.url]; // every visit URL for this query, so ✕ removes them all
+        if (!ex || score > ex.score) byQuery.set(ql, { query, title: h.title, score, h, urls });
+        else { ex.score += score * 0.25; ex.urls = urls; } // repeated searches rank higher
       } else if (lq && display(h.url).toLowerCase().startsWith(host)) {
         const mscore = matchScore(lq.split(/\s+/), h.title || "", h.url);
         if (mscore) pages.push({ kind: "history", url: h.url, title: h.title || display(h.url), h, score: mscore * (1 + frecency(h)) });
@@ -258,7 +259,7 @@
         // ("V123: Shadow mode discrepancy" → "Shadow mode discrepancy").
         const rest = (p.title || "").replace(new RegExp(escRe(p.query), "ig"), "").replace(/^[\s\-–—:|·]+|[\s\-–—:|·]+$/g, "");
         const sub = rest.length > 3 && rest.toLowerCase() !== sc.engine.name.toLowerCase() ? rest : "Recent search";
-        next.push({ kind: "keyword", sc: { ...sc, query: p.query }, title: p.query, sub, iconUrl, past: true });
+        next.push({ kind: "keyword", sc: { ...sc, query: p.query }, title: p.query, sub, iconUrl, past: true, urls: p.urls });
       }
       for (const p of pages) {
         if (next.length >= MAX_ROWS) break;
@@ -362,7 +363,7 @@
       b.addEventListener("click", e => { e.stopPropagation(); switchTo(r.tab); });
       n.append(b);
     }
-    if (r.kind === "history") {
+    if (r.kind === "history" || r.past) {
       const x = el("button", { type: "button", className: "sug-del", textContent: "✕", title: "Remove from history (Shift+Delete)" });
       x.addEventListener("mousedown", e => e.preventDefault());
       x.addEventListener("click", e => { e.stopPropagation(); removeHistory(r); });
@@ -400,11 +401,14 @@
     await chrome.windows.update(tab.windowId, { focused: true });
   }
 
+  // A page, or a past shortcut search (every history URL that ran that query).
   async function removeHistory(r) {
     if (!chrome.history) return;
-    await chrome.history.deleteUrl({ url: r.url });
-    history = history.filter(h => h.url !== r.url);
-    histByUrl.delete(norm(r.url));
+    const urls = r.urls || [r.url];
+    await Promise.all(urls.map(url => chrome.history.deleteUrl({ url })));
+    const gone = new Set(urls);
+    history = history.filter(h => !gone.has(h.url));
+    for (const url of urls) histByUrl.delete(norm(url));
     update(false);
   }
 
@@ -447,7 +451,7 @@
         if (!chrome.search) return openUrl(SEARCH.g.url.replace("%s", encodeURIComponent(r.text)), newTab);
         return chrome.search.query({ text: r.text, disposition: newTab ? "NEW_TAB" : "CURRENT_TAB" });
       case "keyword":
-        return openUrl(r.sc.engine.url.replace("%s", encodeURIComponent(r.sc.query)), newTab);
+        return openUrl(shortcutUrl(r.sc.engine, r.sc.query), newTab);
       case "keyhint":
         return enterKeyword(r.key);
       case "info":
@@ -601,7 +605,7 @@
       e.preventDefault();
       if (hasCompletionSelected()) { input.value = typed; completion = null; }
       else { input.value = typed = ""; rows = []; keyword = null; hidePill(); closeBar(); }
-    } else if ((k === "Delete" || k === "Backspace") && e.shiftKey && rows[sel]?.kind === "history") {
+    } else if ((k === "Delete" || k === "Backspace") && e.shiftKey && (rows[sel]?.kind === "history" || rows[sel]?.past)) {
       e.preventDefault();
       removeHistory(rows[sel]);
     } else if (k === "Backspace" && !e.shiftKey && keyword && input.selectionStart === 0 && input.selectionEnd === 0) {

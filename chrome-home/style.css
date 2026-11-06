@@ -150,6 +150,7 @@ body.navigating .cmd-ico { color: var(--accent); }
 }
 
 .sug {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -180,22 +181,28 @@ body.navigating .cmd-ico { color: var(--accent); }
 }
 .sug-tab::after { content: " →"; }
 .sug.sel .sug-tab, .sug-tab:hover { color: var(--accent); }
+/* Overlaid on the row's right end (no space of its own), shown on hover/selection.
+   The fade lets it sit over "Switch to tab" or the star without a hard edge. */
 .sug-del {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  padding: 0;
+  --row-bg: var(--card);
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 48px;
+  padding: 0 12px 0 0;
+  text-align: right;
+  border-radius: 0 10px 10px 0;
+  background: linear-gradient(to right, transparent, var(--row-bg) 16px);
   font: inherit;
   font-size: 11px;
   color: var(--muted);
-  background: transparent;
   border: 0;
-  border-radius: 6px;
   cursor: pointer;
   visibility: hidden;
 }
 .sug:hover .sug-del, .sug.sel .sug-del { visibility: visible; }
-.sug-del:hover { background: var(--border); color: var(--text); }
+.sug-del:hover { color: var(--text); }
 #search {
   flex: 1;
   min-width: 0;
@@ -822,3 +829,14 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 #settings label.check input { display: inline; flex: none; width: auto; margin: 2px 0 0; }
 #settings label.check .hint { display: block; margin: 2px 0 0; }
 
+
+.sug.sel .sug-del { --row-bg: var(--sel); }
+
+.drop-ghost {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border: 2px dashed var(--accent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}

@@ -263,6 +263,7 @@ const isSectionDrag = e => e.dataTransfer.types.includes(SECTION_TYPE);
 function clearDropMarks() {
   document.querySelectorAll(".drop-before, .drop-into, .drop-card, .drop-after, .drop-end").forEach(n =>
     n.classList.remove("drop-before", "drop-into", "drop-card", "drop-after", "drop-end"));
+  dropGhost.remove();
 }
 
 // Where a link drop lands: the link nearest the pointer (direct children of zone only),
@@ -479,12 +480,14 @@ function cardShell(id, title, acts, body, extraClass = "") {
     saveLayout();
   });
   head.addEventListener("dragstart", e => {
+    draggingCard = card;
     e.dataTransfer.setData(SECTION_TYPE, id);
     e.dataTransfer.effectAllowed = "move";
     card.classList.add("dragging");
     document.body.classList.add("dragging-section");
   });
   head.addEventListener("dragend", () => {
+    draggingCard = null;
     card.classList.remove("dragging");
     document.body.classList.remove("dragging-section");
     clearDropMarks();
@@ -642,19 +645,43 @@ function cardAfterPointer(col, y) {
     .find(c => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; });
 }
 
+// While a card is dragged, a dashed outline shows exactly where it would land: its own
+// width (a wide widget covers several columns) and height, at the spot arrange() would
+// put it.
+let draggingCard = null;
+const dropGhost = el("div", { className: "drop-ghost" });
+
+function showDropGhost(colIndex, beforeCard) {
+  const { sec, n, gap, colW } = columnMetrics();
+  const lane = n === 1 ? 0 : Math.min(colIndex, n - 1);
+  const id = draggingCard?.dataset.id;
+  const span = n === 1 ? 1 : Math.max(1, Math.min(layout.sizes[id]?.span || 1, n - lane));
+  const left = lane * (colW + gap);
+  const width = span * colW + (span - 1) * gap;
+  const height = Math.max(48, draggingCard?.offsetHeight || 80);
+  let top = 0;
+  if (beforeCard) top = parseFloat(beforeCard.style.top) || 0;
+  else {
+    // Below everything already in the columns it would cover.
+    for (const c of sec.querySelectorAll(".col > .card:not(.dragging)")) {
+      const cl = (parseFloat(c.parentElement.style.left) || 0) + c.offsetLeft;
+      if (cl < left + width - 1 && cl + c.offsetWidth > left + 1) {
+        top = Math.max(top, (parseFloat(c.style.top) || 0) + c.offsetHeight + gap);
+      }
+    }
+  }
+  Object.assign(dropGhost.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+  if (!dropGhost.isConnected) sec.append(dropGhost);
+}
+
 function columnNode(index) {
   const col = el("div", { className: "col", dataset: { col: index } });
   col.addEventListener("dragover", e => {
     if (!isSectionDrag(e)) return;
     e.preventDefault();
-    clearDropMarks();
-    const after = cardAfterPointer(col, e.clientY);
-    const last = [...col.querySelectorAll(":scope > .card:not(.dragging)")].pop();
-    if (after) after.classList.add("drop-card");
-    else if (last) last.classList.add("drop-after");
-    else col.classList.add("drop-end");
+    showDropGhost(index, cardAfterPointer(col, e.clientY));
   });
-  col.addEventListener("dragleave", e => { if (!col.contains(e.relatedTarget)) clearDropMarks(); });
+  col.addEventListener("dragleave", e => { if (!e.relatedTarget?.closest?.("#sections")) clearDropMarks(); });
   col.addEventListener("drop", e => {
     if (!isSectionDrag(e)) return;
     e.preventDefault();
