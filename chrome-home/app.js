@@ -11,7 +11,6 @@ const el = (tag, attrs = {}, ...children) => {
 };
 
 const state = { other: null, bar: null, fav: null, archive: null, pinned: new Set() };
-let allLinks = []; // { node, text, parents } for the filter
 // ---------- saved layout ----------
 // Kept in chrome.storage.local (bookmark IDs are per-machine, so this isn't synced).
 //   columns:   number of columns
@@ -330,7 +329,6 @@ function linkNode(b, kind, parents) {
     e.dataTransfer.setData("text/uri-list", b.url);
     e.dataTransfer.effectAllowed = "copyMove";
   });
-  allLinks.push({ node: a, text: `${name} ${b.url}`.toLowerCase(), parents });
   return a;
 }
 
@@ -355,7 +353,6 @@ function groupNode(f, parents) {
   const d = el("details", { dataset: { id: f.id } });
   d.open = openGroups.has(f.id);
   d.addEventListener("toggle", () => {
-    if (filtering) return;
     d.open ? openGroups.add(f.id) : openGroups.delete(f.id);
     saveOpenGroups();
   });
@@ -438,14 +435,12 @@ async function load() {
   if (dupes.length) { for (const d of dupes) await bm.remove(d.id); return; } // removal re-triggers load
   Object.assign(state, { bar, other, fav, archive });
   state.pinned = new Set(favNode.children.filter(c => c.url).map(c => c.url));
-  allLinks = [];
 
   const favs = $("#favorites");
-  favs.replaceChildren();
   // #favorites survives re-renders, so attach its drop handlers only once.
   if (!favs.dataset.zone) { dropZone(favs, () => state.fav.id); favs.dataset.zone = "1"; }
-  for (const c of favNode.children) if (c.url) favs.append(linkNode(c, "fav", []));
-  if (!state.pinned.size) favs.append(el("div", { className: "empty", textContent: "Pin links with ☆ or drag them here" }));
+  const favNodes = favNode.children.filter(c => c.url).map(c => linkNode(c, "fav", []));
+  if (!favNodes.length) favNodes.push(el("div", { className: "empty", textContent: "Pin links with ☆ or drag them here" }));
 
   // Every section, in bookmark order: [folderNode, cardOptions]
   const list = [];
@@ -462,16 +457,74 @@ async function load() {
   placeNewSections(list.map(([f]) => f), archive?.id);
 
   const cards = new Map(list.map(([f, opts]) => [f.id, cardNode(f, opts)]));
-  const sections = $("#sections");
-  sections.style.setProperty("--cols", layout.columns);
-  sections.replaceChildren(...layout.cols.map((ids, i) => {
+  const colNodes = layout.cols.map((ids, i) => {
     const col = columnNode(i);
     for (const id of ids) if (cards.has(id)) col.append(cards.get(id));
     return col;
-  }));
-  $("#col-count").textContent = layout.columns;
+  });
 
-  applyFilter();
+  // Commit everything in one synchronous step (no awaits above this point touch the DOM),
+  // so the browser never paints a half-rendered page.
+  const sections = $("#sections");
+  reuseImages([...favNodes, ...colNodes], [favs, sections]);
+  favs.replaceChildren(...favNodes);
+  sections.style.setProperty("--cols", layout.columns);
+  sections.replaceChildren(...colNodes);
+  $("#col-count").textContent = layout.columns;
+  markReady();
+  saveSnapshot();
+
+}
+
+// Swap freshly built <img> nodes for already-loaded ones with the same src, so icons
+// don't blink while the snapshot (or a previous render) is replaced.
+function reuseImages(newRoots, oldRoots) {
+  const loaded = new Map();
+  for (const root of oldRoots) {
+    for (const img of root.querySelectorAll("img")) {
+      if (!img.complete || !img.naturalWidth) continue;
+      const src = img.getAttribute("src");
+      loaded.has(src) ? loaded.get(src).push(img) : loaded.set(src, [img]);
+    }
+  }
+  for (const root of newRoots) {
+    for (const img of root.querySelectorAll("img")) {
+      const reuse = loaded.get(img.getAttribute("src"))?.pop();
+      if (reuse) img.replaceWith(reuse);
+    }
+  }
+}
+
+// main stays hidden (see style.css) until it has real content, so the first visible
+// frame is the finished page rather than a header/footer with nothing in between.
+const markReady = () => document.documentElement.classList.add("ready");
+
+// ---------- instant first paint ----------
+// The last rendered homepage is kept in localStorage (synchronous to read) and painted
+// before the async bookmark load, so a new tab shows its content on the very first
+// frame. The real render replaces it a few ms later with identical markup + handlers.
+const SNAPSHOT_KEY = "homeSnapshot";
+
+function saveSnapshot() {
+  try {
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
+      fav: $("#favorites").innerHTML,
+      sections: $("#sections").innerHTML,
+      cols: layout.columns,
+    }));
+  } catch { /* storage full or unavailable: just skip the snapshot */ }
+}
+
+function paintSnapshot() {
+  try {
+    const snap = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || "null");
+    if (!snap) return;
+    $("#favorites").innerHTML = snap.fav;
+    $("#sections").innerHTML = snap.sections;
+    $("#sections").style.setProperty("--cols", snap.cols);
+    $("#col-count").textContent = snap.cols;
+    markReady();
+  } catch { /* corrupt snapshot: ignore, the real render follows */ }
 }
 
 // Our own edits fire these too, so this is the only re-render path.
@@ -484,6 +537,7 @@ if (bm) {
 }
 
 function showError(msg) {
+  markReady();
   $("#sections").replaceChildren(el("div", { className: "card error" }, el("h2", { textContent: "Can't load bookmarks" }),
     el("div", { className: "empty", textContent: msg })));
 }
@@ -496,103 +550,9 @@ function tick() {
   $("#date").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
 }
 
-// ---------- search / filter ----------
+// ---------- search ----------
+// The command bar (search box) is driven by omnibox.js.
 
-const input = $("#search");
-let matches = [];
-let selected = 0;
-let filtering = false;
-
-// "<key> <query>" → search mode as soon as the space is typed (query may still be empty).
-// Takes the raw input value: trimming would hide the space that switches modes.
-function parseShortcut(raw) {
-  const m = raw.trimStart().match(/^(\S+)\s+(.*)$/s);
-  return m && SEARCH[m[1]] ? { engine: SEARCH[m[1]], query: m[2].trim() } : null;
-}
-
-function setSelected(i) {
-  matches.forEach(m => m.node.classList.remove("sel"));
-  selected = i;
-  if (matches[i]) {
-    matches[i].node.classList.add("sel");
-    matches[i].node.scrollIntoView({ block: "nearest" });
-  }
-}
-
-function applyFilter() {
-  const q = input.value.trim();
-  const sc = parseShortcut(input.value);
-  filtering = Boolean(q && !sc);
-
-  document.querySelectorAll(".card, details").forEach(n => n.classList.remove("hidden"));
-  document.querySelectorAll("#sections .card").forEach(c =>
-    c.classList.toggle("collapsed", !filtering && layout.collapsed.has(c.dataset.id)));
-  allLinks.forEach(l => l.node.classList.remove("hidden", "sel"));
-  matches = [];
-
-  if (filtering) {
-    const terms = q.toLowerCase().split(/\s+/);
-    const visible = new Set();
-    for (const l of allLinks) {
-      const hit = terms.every(t => l.text.includes(t));
-      l.node.classList.toggle("hidden", !hit);
-      if (hit) { matches.push(l); l.parents.forEach(p => visible.add(p)); }
-    }
-    document.querySelectorAll(".card, details").forEach(n => {
-      n.classList.toggle("hidden", !visible.has(n));
-      if (n.tagName === "DETAILS") n.open = visible.has(n);
-    });
-    setSelected(0);
-  } else {
-    document.querySelectorAll("details").forEach(d => (d.open = openGroups.has(d.dataset.id)));
-  }
-
-  const h = $("#hint");
-  if (sc) {
-    h.replaceChildren(...(sc.query
-      ? ["Enter to search ", el("b", { textContent: sc.engine.name }), ` for “${sc.query}”`]
-      : ["Search ", el("b", { textContent: sc.engine.name }), ": type your query"]));
-  } else if (SEARCH[q]) {
-    h.replaceChildren("Space to search ", el("b", { textContent: SEARCH[q].name }));
-  } else if (filtering) {
-    h.textContent = matches.length
-      ? `${matches.length} match${matches.length > 1 ? "es" : ""} · ↑↓ move · Enter open · ⌘Enter new tab`
-      : "No links match. Enter to search Google.";
-  } else {
-    h.textContent = Object.entries(SEARCH).map(([k, v]) => `${k} ${v.name.toLowerCase()}`).join(" · ") + " · / to focus";
-  }
-}
-
-function go(url, newTab) {
-  if (newTab) window.open(url, "_blank");
-  else location.href = url;
-}
-
-input.addEventListener("input", applyFilter);
-input.addEventListener("keydown", e => {
-  const q = input.value.trim();
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-    if (!matches.length) return;
-    e.preventDefault();
-    const d = e.key === "ArrowDown" ? 1 : -1;
-    setSelected((selected + d + matches.length) % matches.length);
-  } else if (e.key === "Enter" && q) {
-    e.preventDefault();
-    const newTab = e.metaKey || e.ctrlKey;
-    const sc = parseShortcut(input.value);
-    if (sc && !sc.query) return;
-    if (sc) return go(sc.engine.url.replace("%s", encodeURIComponent(sc.query)), newTab);
-    if (matches[selected]) return go(matches[selected].node.href, newTab);
-    go(SEARCH.g.url.replace("%s", encodeURIComponent(q)), newTab);
-  } else if (e.key === "Escape") {
-    input.value = "";
-    applyFilter();
-  }
-});
-document.addEventListener("keydown", e => {
-  const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
-  if (e.key === "/" && !typing && !editor.open) { e.preventDefault(); input.focus(); }
-});
 
 $("#col-minus").addEventListener("click", () => setColumns(layout.columns - 1));
 $("#col-plus").addEventListener("click", () => setColumns(layout.columns + 1));
@@ -604,5 +564,10 @@ $("#manage").addEventListener("click", e => {
 
 tick();
 setInterval(tick, 10_000);
-if (!bm) showError("The extension doesn't have bookmarks permission yet. Open chrome://extensions and click the reload icon on Home.");
-else load().catch(e => showError(String(e?.message || e)));
+if (REOPENING) { /* focus.js is replacing this tab */ }
+else if (!bm) showError("The extension doesn't have bookmarks permission yet. Open chrome://extensions and click the reload icon on Home.");
+else {
+  paintSnapshot();
+  load().catch(e => showError(String(e?.message || e)));
+  setTimeout(markReady, 600); // never stay hidden if something stalls
+}
