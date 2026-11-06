@@ -539,12 +539,17 @@
   }
 
   // Backspace at the start of an empty query turns the pill back into text, like Arc/Chrome.
+  // The text comes back as typed ("is " plus any query), and stays plain text: the pill
+  // only returns once the space after the key is removed and typed again.
+  let literalKey = null;
   function exitKeyword() {
     const key = keyword;
+    const rest = input.value;
     keyword = null;
     hidePill();
-    typed = key;
-    input.value = key;
+    literalKey = key;
+    typed = input.value = `${key} ${rest}`;
+    input.setSelectionRange(key.length + 1, key.length + 1);
     update(false);
   }
 
@@ -561,7 +566,8 @@
 
   input.addEventListener("input", e => {
     typed = input.value;
-    if (!keyword) {
+    if (literalKey && !typed.startsWith(`${literalKey} `)) literalKey = null;
+    if (!keyword && !literalKey) {
       const m = typed.match(/^(\S+)\s(.*)$/s); // "code " → pill
       if (m && SEARCH[m[1]]) return enterKeyword(m[1], m[2]);
     }
