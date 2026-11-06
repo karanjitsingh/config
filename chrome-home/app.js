@@ -162,7 +162,7 @@ for (const dlg of document.querySelectorAll("dialog")) {
 }
 
 // ---------- context menu ----------
-const menu = el("div", { id: "ctxmenu", className: "hidden", role: "menu" });
+const menu = el("div", { id: "ctxmenu", className: "hidden", role: "menu", tabIndex: -1 });
 document.body.append(menu);
 const hideMenu = () => menu.classList.add("hidden");
 
@@ -176,8 +176,17 @@ function showMenu(x, y, items) {
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
   menu.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
-  menu.querySelector("button").focus();
+  menu.focus(); // nothing preselected; ↑/↓ start moving through the items
 }
+menu.addEventListener("keydown", e => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  const items = [...menu.querySelectorAll("button")];
+  const i = items.indexOf(document.activeElement);
+  const next = i === -1 ? (e.key === "ArrowDown" ? 0 : items.length - 1)
+    : (i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+  items[next].focus();
+});
 document.addEventListener("mousedown", e => { if (!menu.contains(e.target)) hideMenu(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") hideMenu(); });
 addEventListener("blur", hideMenu);
@@ -221,8 +230,8 @@ async function editLink(b) {
   if (v) await bm.update(b.id, v);
 }
 
-async function addLink(folderId) {
-  const v = await openEditor({ heading: "Add link" });
+async function addLink(folderId, heading = "Add link") {
+  const v = await openEditor({ heading });
   if (v) await bm.create({ parentId: folderId, ...v });
 }
 
@@ -674,7 +683,6 @@ async function load() {
   // #favorites survives re-renders, so attach its drop handlers only once.
   if (!favs.dataset.zone) { dropZone(favs, () => state.fav.id); favs.dataset.zone = "1"; }
   const favNodes = favNode.children.filter(c => c.url).map(c => linkNode(c, "fav", []));
-  if (!favNodes.length) favNodes.push(el("div", { className: "empty", textContent: "Pin links with ☆ or drag them here" }));
 
   await loadSavedLayout();
   if (layout.version < LAYOUT_VERSION) upgradeLayout(otherTree, barTree);
@@ -705,10 +713,6 @@ async function load() {
     return col;
   });
   if (pruned) saveLayout();
-  if (!colNodes.some(c => c.children.length)) {
-    colNodes[0].append(el("div", { className: "card empty-page" },
-      el("div", { className: "empty", textContent: "Nothing here yet. Use “+ Add to page” to add bookmark folders and widgets." })));
-  }
 
   // Commit everything in one synchronous step (no awaits above this point touch the DOM),
   // so the browser never paints a half-rendered page.
@@ -885,6 +889,20 @@ function tick() {
 $("#col-minus").addEventListener("click", () => setColumns(layout.columns - 1));
 $("#col-plus").addEventListener("click", () => setColumns(layout.columns + 1));
 $("#add-card").addEventListener("click", openAddDialog);
+
+// Right-click anywhere on the page background. Links, inputs, selected text and
+// anything with its own menu (favorite tiles, code reviews) keep theirs.
+document.addEventListener("contextmenu", e => {
+  if (e.defaultPrevented || REOPENING || !state.fav) return;
+  if (e.target.closest("a, input, textarea, dialog, #cmd-backdrop") || String(getSelection())) return;
+  e.preventDefault();
+  showMenu(e.clientX, e.clientY, [
+    ["Add favorite", () => addLink(state.fav.id, "Add favorite")],
+    ["Add to page", openAddDialog],
+    ["Settings", () => $("#open-settings").click()],
+    ["Open bookmark manager", () => $("#manage").click()],
+  ]);
+});
 $("#add-back").addEventListener("click", () => showAddView("main"));
 $("#manage").addEventListener("click", e => {
   e.preventDefault();

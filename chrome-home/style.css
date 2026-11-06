@@ -480,6 +480,7 @@ body.popup { width: 280px; padding: 12px; }
 dialog label .hint { opacity: .7; margin-left: 4px; }
 
 #ctxmenu {
+  outline: none;
   position: fixed;
   z-index: 10;
   min-width: 160px;
@@ -820,3 +821,4 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 #settings label.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--text); cursor: pointer; }
 #settings label.check input { display: inline; flex: none; width: auto; margin: 2px 0 0; }
 #settings label.check .hint { display: block; margin: 2px 0 0; }
+
