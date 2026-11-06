@@ -7,12 +7,19 @@
 // The page checks whether it actually got focus and remembers the method that works.
 // Trade-off either way: the address bar shows this page's URL.
 //
-// Set to false to keep Chrome's default (address bar focused, blank URL).
-const FOCUS_PAGE = true;
+// Settings → "Put the cursor in the homepage". Off keeps Chrome's default (address bar
+// focused, blank URL).
+const FOCUS_PAGE = localStorage.focusPage !== "off";
 
 const PARAMS = new URLSearchParams(location.search);
 const REOPENED = PARAMS.has("focused");
-const REOPENING = FOCUS_PAGE && !REOPENED;
+// Only a genuinely fresh new tab gets the focus hand-off. A tab restored with ⌘⇧T, a
+// reload, or Back/Forward just shows the page: the hand-off closes a tab, and closing a
+// restored tab would put it straight back on top of Chrome's recently-closed list, so
+// ⌘⇧T would keep reopening the homepage instead of the tabs you actually closed.
+const NAV_TYPE = performance.getEntriesByType("navigation")[0]?.type || "navigate";
+const FRESH = NAV_TYPE === "navigate" && history.length === 1;
+const REOPENING = FOCUS_PAGE && !REOPENED && FRESH;
 
 if (REOPENING) {
   // Hide content (the background still paints) so nothing flashes before the swap.
@@ -24,7 +31,12 @@ if (REOPENING) {
     if (method === "update") chrome.tabs.update(tab.id, { url });
     else chrome.tabs.create({ url, index: tab.index, windowId: tab.windowId, active: true }, () => chrome.tabs.remove(tab.id));
   });
-} else if (REOPENED && PARAMS.get("focused") === "update") {
+}
+
+// Tidy the address bar: drop "?focused=…" once it's been read.
+if (REOPENED) history.replaceState(null, "", location.pathname);
+
+if (REOPENED && PARAMS.get("focused") === "update") {
   // If navigating in place left focus in the address bar, use the fallback next time.
   addEventListener("load", () => setTimeout(() => {
     if (!document.hasFocus() && document.visibilityState === "visible") localStorage.focusMethod = "create";

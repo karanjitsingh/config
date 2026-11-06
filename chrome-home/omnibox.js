@@ -62,6 +62,42 @@
     bookmarks = m;
   }
 
+  // ---------- Chrome pages ----------
+  // [title, url, extra words to match on]
+  const CHROME_PAGES = [
+    ["Settings", "chrome://settings", "preferences options"],
+    ["Extensions", "chrome://extensions", "add-ons addons plugins"],
+    ["Extension shortcuts", "chrome://extensions/shortcuts", "keyboard hotkeys keybindings"],
+    ["History", "chrome://history", ""],
+    ["Downloads", "chrome://downloads", "files"],
+    ["Bookmarks", "chrome://bookmarks", "bookmark manager"],
+    ["Passwords", "chrome://password-manager/passwords", "password manager passkeys logins"],
+    ["Clear browsing data", "chrome://settings/clearBrowserData", "cache cookies delete history"],
+    ["Privacy and security", "chrome://settings/privacy", "safe browsing"],
+    ["Site settings", "chrome://settings/content", "permissions camera microphone location notifications cookies popups"],
+    ["Search engines", "chrome://settings/searchEngines", "site search default search engine"],
+    ["Appearance", "chrome://settings/appearance", "theme font zoom"],
+    ["Autofill", "chrome://settings/autofill", "addresses payment methods cards"],
+    ["Sync and Google services", "chrome://settings/syncSetup", "account sign in"],
+    ["Profiles", "chrome://settings/people", "people accounts"],
+    ["On startup", "chrome://settings/onStartup", "startup pages"],
+    ["Default browser", "chrome://settings/defaultBrowser", ""],
+    ["Languages", "chrome://settings/languages", "spell check translate"],
+    ["Downloads settings", "chrome://settings/downloads", "download location"],
+    ["Accessibility", "chrome://settings/accessibility", "captions"],
+    ["Performance", "chrome://settings/performance", "memory saver energy"],
+    ["System", "chrome://settings/system", "proxy hardware acceleration"],
+    ["Reset settings", "chrome://settings/reset", ""],
+    ["About Chrome", "chrome://settings/help", "version update"],
+    ["Flags", "chrome://flags", "experiments"],
+    ["Version", "chrome://version", "about"],
+    ["Inspect devices", "chrome://inspect", "devtools debugging remote"],
+    ["Policies", "chrome://policy", "managed"],
+    ["Components", "chrome://components", ""],
+    ["GPU", "chrome://gpu", "graphics"],
+    ["Net internals", "chrome://net-internals", "dns network"],
+  ].map(([title, url, words]) => ({ title, url, words }));
+
   // ---------- ranking ----------
 
   // How well all terms match. Host prefix > host-part prefix > title word > URL word > substring.
@@ -105,6 +141,10 @@
       if (ex) Object.assign(ex, { kind: "bookmark", title: b.title || ex.title, m: Math.max(ex.m, m) });
       else out.set(k, { kind: "bookmark", url: b.url, title: b.title || display(b.url), m, h: histByUrl.get(k) });
     }
+    for (const p of CHROME_PAGES) {
+      const m = Math.max(matchScore(terms, p.title, p.url), matchScore(terms, `${p.title} ${p.words}`, "") * 0.8);
+      if (m && !out.has(norm(p.url))) out.set(norm(p.url), { kind: "chrome", url: p.url, title: p.title, m, h: histByUrl.get(norm(p.url)) });
+    }
     for (const [k, tab] of tabsByUrl) {
       const ex = out.get(k);
       if (ex) { ex.tab = tab; continue; }
@@ -113,7 +153,10 @@
     }
     const list = [...out.values()];
     for (const c of list) {
-      c.score = c.m * (1 + frecency(c.h)) * (c.kind === "bookmark" ? 1.5 : 1) + (c.kind === "bookmark" ? 20 : 0) + (c.tab ? 10 : 0);
+      // Open tabs rank high (like Arc): you most likely want the one you already have.
+      c.score = c.m * (1 + Math.max(frecency(c.h), c.tab ? 3 : 0))
+        * (c.tab ? 2.5 : c.kind === "bookmark" ? 1.5 : c.kind === "chrome" ? 2.5 : 1)
+        + (c.kind === "bookmark" ? 20 : 0) + (c.tab ? 40 : 0);
     }
     return list.sort((a, b) => b.score - a.score);
   }
@@ -231,9 +274,13 @@
         next.push({ kind: "url", url: inl.url, title: match?.title || inl.text, tab: match?.tab, h: match?.h });
       } else if (looksLikeUrl(q)) {
         next.push({ kind: "url", url: toUrl(q), title: display(toUrl(q)) });
+      } else {
+        const lq = q.toLowerCase();
+        const page = lq.length >= 3 && list.find(c => c.kind === "chrome" && c.title.toLowerCase().startsWith(lq));
+        if (page) next.push(page);
       }
       if (SEARCH[q] && !/\s/.test(typed)) next.push({ kind: "keyhint", key: q, title: `Search ${SEARCH[q].name}`, sub: "press Tab", iconUrl: engineOrigin(q) });
-      next.splice(next[0]?.kind === "url" ? 1 : 0, 0, { kind: "search", text: q, title: q, sub: "Search" });
+      next.splice(["url", "chrome"].includes(next[0]?.kind) ? 1 : 0, 0, { kind: "search", text: q, title: q, sub: "Search" });
       for (const c of list) {
         if (next.length >= MAX_ROWS) break;
         if (next.some(r => r.url && norm(r.url) === norm(c.url))) continue;
@@ -253,6 +300,35 @@
 
   const SEARCH_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 10.4 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
+  // Line icons for Chrome pages (Lucide-style, 24×24 strokes rendered at 16px).
+  const svg = body => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  const ICONS = {
+    gear: svg('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
+    puzzle: svg('<path d="M19.44 7.85c-.05.32.06.65.29.88l1.57 1.57c.47.47.7 1.09.7 1.7s-.23 1.23-.7 1.7l-1.61 1.61a.98.98 0 0 1-.84.28c-.47-.07-.8-.48-.97-.93a2.5 2.5 0 1 0-3.21 3.21c.45.17.86.5.93.97a.98.98 0 0 1-.28.84l-1.61 1.61c-.47.47-1.09.7-1.7.7s-1.23-.23-1.7-.7l-1.57-1.57a1.03 1.03 0 0 0-.88-.29c-.49.07-.84.5-1.02.97a2.5 2.5 0 1 1-3.24-3.24c.47-.18.9-.53.97-1.02a1.03 1.03 0 0 0-.29-.88l-1.57-1.57A2.4 2.4 0 0 1 2 12c0-.62.24-1.23.7-1.7l1.53-1.53c.24-.24.58-.35.92-.3.51.08.88.53 1.07 1.01a2.5 2.5 0 1 0 3.26-3.26c-.48-.2-.93-.56-1.01-1.07-.05-.34.06-.68.3-.92l1.53-1.53A2.4 2.4 0 0 1 12 2c.62 0 1.23.24 1.7.7l1.57 1.57c.23.23.56.34.88.29.49-.07.84-.5 1.02-.97a2.5 2.5 0 1 1 3.24 3.24c-.47.18-.9.53-.97 1.02z"/>'),
+    keyboard: svg('<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>'),
+    history: svg('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'),
+    download: svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>'),
+    star: svg('<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>'),
+    key: svg('<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>'),
+    trash: svg('<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+    shield: svg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'),
+    search: svg('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
+    user: svg('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+    info: svg('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>'),
+    flask: svg('<path d="M10 2v7.53a2 2 0 0 1-.21.9L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.07-10.13A2 2 0 0 1 14 9.53V2"/><path d="M8.5 2h7M7 16h10"/>'),
+    code: svg('<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>'),
+  };
+  // First matching prefix wins (more specific first); anything else gets the gear.
+  const CHROME_ICON = [
+    ["chrome://extensions/shortcuts", "keyboard"], ["chrome://extensions", "puzzle"],
+    ["chrome://history", "history"], ["chrome://downloads", "download"], ["chrome://settings/downloads", "download"],
+    ["chrome://bookmarks", "star"], ["chrome://password-manager", "key"],
+    ["chrome://settings/clearBrowserData", "trash"], ["chrome://settings/privacy", "shield"], ["chrome://settings/content", "shield"],
+    ["chrome://settings/searchEngines", "search"], ["chrome://settings/people", "user"], ["chrome://settings/syncSetup", "user"],
+    ["chrome://settings/help", "info"], ["chrome://version", "info"], ["chrome://policy", "info"],
+    ["chrome://flags", "flask"], ["chrome://inspect", "code"], ["chrome://net-internals", "code"], ["chrome://gpu", "code"],
+  ];
+  const chromeIcon = url => ICONS[CHROME_ICON.find(([p]) => url.startsWith(p))?.[1] || "gear"];
   const CLOCK_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.8V8l2.2 1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
   function highlight(text, terms) {
@@ -270,9 +346,10 @@
 
   function rowNode(r, i, terms) {
     const n = el("div", { className: "sug" + (i === sel ? " sel" : ""), role: "option" });
-    const iconSrc = r.past ? null : r.iconUrl || r.url;
+    const isChrome = r.url?.startsWith("chrome://");
+    const iconSrc = r.past || isChrome ? null : r.iconUrl || r.url;
     const ico = iconSrc ? el("img", { src: favicon(iconSrc, 32), alt: "", width: 16, height: 16 }) : el("span", { className: "sug-ico" });
-    if (!iconSrc) ico.innerHTML = r.past ? CLOCK_ICON : SEARCH_ICON;
+    if (!iconSrc) ico.innerHTML = r.past ? CLOCK_ICON : isChrome ? chromeIcon(r.url) : SEARCH_ICON;
     const text = el("span", { className: "sug-text" }, el("span", { className: "sug-title" }, highlight(r.title, terms)));
     if (r.url && r.kind !== "url") text.append(el("span", { className: "sug-sub" }, " – ", highlight(display(r.url), terms)));
     else if (r.url && r.title !== display(r.url)) text.append(el("span", { className: "sug-sub" }, " – ", display(r.url)));
@@ -316,11 +393,11 @@
     chrome.tabs.update(cur.id, { url });
   }
 
+  // The homepage tab stays open: closing it would put it on Chrome's recently-closed
+  // list, so ⌘⇧T would reopen the homepage instead of the tab you actually closed.
   async function switchTo(tab) {
     await chrome.tabs.update(tab.id, { active: true });
     await chrome.windows.update(tab.windowId, { focused: true });
-    const cur = await chrome.tabs.getCurrent();
-    if (cur) chrome.tabs.remove(cur.id); // Chrome closes the new tab when you switch away
   }
 
   async function removeHistory(r) {
@@ -331,8 +408,40 @@
     update(false);
   }
 
+  // Immediate feedback on Enter: the next page can take a moment to start painting, and
+  // without this the bar just sits there as if nothing happened.
+  let navTimer;
+  // What the bar shows while loading: the destination, not what was typed.
+  function destinationText(r) {
+    if (r.kind === "search") return r.text;
+    if (r.kind === "keyword") return r.sc.query;
+    return r.url ? display(r.url) : input.value;
+  }
+
+  function showNavigating(r) {
+    input.value = destinationText(r);
+    input.setSelectionRange(input.value.length, input.value.length);
+    input.scrollLeft = 0; // long URLs: show the start (the host), like the address bar
+    document.body.classList.add("navigating");
+    box.classList.add("hidden");
+    input.readOnly = true;
+    clearTimeout(navTimer);
+    navTimer = setTimeout(stopNavigating, 8000); // e.g. a download, or a blocked navigation
+  }
+  function stopNavigating() {
+    clearTimeout(navTimer);
+    document.body.classList.remove("navigating");
+    input.readOnly = false;
+  }
+  // Coming back via the back/forward cache shouldn't show a stuck loading state.
+  addEventListener("pageshow", stopNavigating);
+
   function activate(r, newTab) {
     if (!r) return;
+    // Anything already open in another tab switches to it (like Arc); ⌘Enter opens a copy.
+    if (r.tab && !newTab) return switchTo(r.tab);
+    const navigates = !newTab && !["keyhint", "info", "tab"].includes(r.kind);
+    if (navigates) showNavigating(r);
     switch (r.kind) {
       case "search":
         if (!chrome.search) return openUrl(SEARCH.g.url.replace("%s", encodeURIComponent(r.text)), newTab);
@@ -357,7 +466,10 @@
   const PLACEHOLDER = input.placeholder;
 
   function engineOrigin(key) {
-    try { return new URL(SEARCH[key].url.replace("%s", "")).origin + "/"; } catch { return SEARCH[key].url; }
+    try {
+      const u = new URL(SEARCH[key].url.replace("%s", ""));
+      return u.origin !== "null" ? `${u.origin}/` : `${u.protocol}//${u.host}/`;
+    } catch { return SEARCH[key].url; }
   }
 
   // The pill takes the site's brand color, sampled from its favicon: the average of the
@@ -459,6 +571,11 @@
 
   input.addEventListener("keydown", e => {
     const k = e.key;
+    if (document.body.classList.contains("navigating")) {
+      if (k === "Escape") stopNavigating();
+      e.preventDefault();
+      return;
+    }
     if (k === "ArrowDown" || k === "ArrowUp") {
       if (!rows.length) return;
       e.preventDefault();
@@ -507,6 +624,17 @@
     box.classList.add("hidden");
     input.blur();
   }
+
+  // Leaving the tab resets it, so switching back shows a fresh homepage rather than a
+  // half-typed search.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "hidden") return;
+    input.value = typed = "";
+    rows = [];
+    keyword = null;
+    hidePill();
+    closeBar();
+  });
 
   // Clicking outside the bar reveals the homepage underneath.
   backdrop.addEventListener("mousedown", e => {

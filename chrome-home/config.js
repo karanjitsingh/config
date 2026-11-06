@@ -4,4 +4,5 @@ const SEARCH_BASE = {
   g:  { name: "Google",  url: "https://www.google.com/search?q=%s" },
   gh: { name: "GitHub",  url: "https://github.com/search?q=%s&type=code" },
   yt: { name: "YouTube", url: "https://www.youtube.com/results?search_query=%s" },
+  settings: { name: "Settings", url: "chrome://settings/?search=%s" },
 };

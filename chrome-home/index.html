@@ -20,13 +20,16 @@
     <nav id="favorites"></nav>
     <section id="sections"></section>
     <div id="footer">
-      <button id="add-section" type="button">+ New section</button>
+      <button id="add-card" type="button">+ Add to page</button>
       <span id="col-ctrl">Columns
         <button id="col-minus" type="button" title="Fewer columns">−</button>
         <b id="col-count"></b>
         <button id="col-plus" type="button" title="More columns">+</button>
       </span>
-      <a id="manage" href="#">Open in bookmark manager</a>
+      <span id="footer-icons">
+        <a id="manage" class="icon-btn" href="#" title="Open in bookmark manager" aria-label="Open in bookmark manager"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></a>
+        <button id="open-settings" class="icon-btn" type="button" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </span>
     </div>
   </main>
 
@@ -57,13 +60,56 @@
     </form>
   </dialog>
 
+  <dialog id="settings">
+    <form method="dialog">
+      <h3>Settings</h3>
+      <h4>New tab</h4>
+      <label class="check"><input id="set-focus" type="checkbox">
+        <span>Put the cursor in the homepage, not the address bar
+          <span class="hint">The address bar then shows this page's URL instead of staying blank.</span></span></label>
+      <h4>Search shortcuts</h4>
+      <p class="hint">Type the key, then Space or Tab, in the search box. Put <code>%s</code> where the search text goes. These are this homepage's own and separate from Chrome's site search.</p>
+      <div id="sc-list"></div>
+      <div class="sc-tools">
+        <button id="sc-add" type="button">+ Add shortcut</button>
+        <button id="sc-reset" type="button">Reset to defaults</button>
+      </div>
+      <p id="set-error"></p>
+      <menu>
+        <button value="ok" class="primary">Save</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="add-dlg">
+    <form method="dialog">
+      <div id="add-main">
+        <header class="dlg-head"><h3>Add to page</h3><button class="dlg-x" value="cancel" title="Close" aria-label="Close">✕</button></header>
+        <div id="wg-list" class="wg-list"></div>
+      </div>
+      <div id="add-pick" class="hidden">
+        <header class="dlg-head">
+          <button id="add-back" type="button" class="dlg-back" title="Back" aria-label="Back">‹</button>
+          <h3>Choose a folder</h3>
+          <button class="dlg-x" value="cancel" title="Close" aria-label="Close">✕</button>
+        </header>
+        <input id="af-filter" type="search" placeholder="Filter folders" autocomplete="off" spellcheck="false">
+        <div id="af-list"></div>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="hidden"><span></span><button type="button">Undo</button></div>
 
   <script src="config.js"></script>
   <script src="config.local.js"></script>
   <script src="config.merge.js"></script>
   <script src="shared.js"></script>
+  <script src="widgets.js"></script>
+  <script src="widgets.local.js"></script>
   <script src="app.js"></script>
+  <script src="settings.js"></script>
   <script src="omnibox.js"></script>
 </body>
 </html>

@@ -18,9 +18,15 @@ const state = { other: null, bar: null, fav: null, archive: null, pinned: new Se
 //              so a section that disappears and comes back returns to its spot)
 //   collapsed: section ids that are collapsed
 //   open:      group (sub-folder) ids that are expanded
+//   sizes:     { cardId: { span, height } } for resizable widgets (columns wide, body px)
+//   version:   2 = cols lists exactly the cards on the page. Before that every top-level
+//              folder showed automatically (plus v1's `widgets`/`hidden` lists).
+// Cards are bookmark folder ids or "widget:<id>". Nothing appears on its own: folders and
+// widgets are added from "+ Add to page" and removed with ✕ (the folder stays in bookmarks).
 const LAYOUT_KEY = "layout";
+const LAYOUT_VERSION = 2;
 const MAX_COLS = 5;
-const layout = { columns: 3, cols: [[], [], []], collapsed: new Set(), open: new Set(), loaded: false };
+const layout = { columns: 3, cols: [[], [], []], collapsed: new Set(), open: new Set(), sizes: {}, version: 0, legacy: null, loaded: false };
 const openGroups = layout.open;
 
 async function loadSavedLayout() {
@@ -31,6 +37,9 @@ async function loadSavedLayout() {
     layout.cols = saved.cols;
     saved.collapsed.forEach(id => layout.collapsed.add(id));
     saved.open.forEach(id => layout.open.add(id));
+    layout.version = saved.version || 1;
+    layout.sizes = saved.sizes || {};
+    layout.legacy = { widgets: saved.widgets || [], hidden: saved.hidden || [] };
   } else {
     JSON.parse(localStorage.openGroups || "[]").forEach(id => layout.open.add(id)); // from v3
   }
@@ -39,8 +48,8 @@ async function loadSavedLayout() {
 
 function saveLayout() {
   return chrome.storage.local.set({ [LAYOUT_KEY]: {
-    columns: layout.columns, cols: layout.cols,
-    collapsed: [...layout.collapsed], open: [...layout.open],
+    version: LAYOUT_VERSION, columns: layout.columns, cols: layout.cols,
+    collapsed: [...layout.collapsed], open: [...layout.open], sizes: layout.sizes,
   } });
 }
 const saveOpenGroups = saveLayout;
@@ -50,9 +59,9 @@ function fitColumns() {
   while (layout.cols.length > layout.columns) layout.cols[layout.cols.length - 2].push(...layout.cols.pop());
 }
 
-// Place sections the layout hasn't seen yet. Each goes to the column with the least
-// content (by row count, so it's deterministic), Archive goes last and starts collapsed.
-// Placement happens once and is saved; after that nothing moves unless you move it.
+// First run / upgrade only: lay out the default set of sections. Each goes to the column
+// with the least content (by row count, so it's deterministic); Archive goes last and
+// starts collapsed.
 function placeNewSections(sections, archiveId) {
   fitColumns();
   const known = new Set(layout.cols.flat());
@@ -137,6 +146,21 @@ function openEditor({ heading, title = "", url = "", emoji = "", folder = false 
   });
 }
 
+// Every dialog closes on a click outside it, like Esc. Both press and release must land
+// outside, so a text selection that ends past the edge doesn't close it.
+for (const dlg of document.querySelectorAll("dialog")) {
+  const outside = e => {
+    const r = dlg.getBoundingClientRect();
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  };
+  let downOutside = false;
+  dlg.addEventListener("mousedown", e => { downOutside = e.target === dlg && outside(e); });
+  dlg.addEventListener("click", e => {
+    if (downOutside && e.target === dlg && outside(e)) dlg.close();
+    downOutside = false;
+  });
+}
+
 // ---------- context menu ----------
 const menu = el("div", { id: "ctxmenu", className: "hidden", role: "menu" });
 document.body.append(menu);
@@ -204,7 +228,7 @@ async function addLink(folderId) {
 
 async function addFolder(parentId, heading, index) {
   const v = await openEditor({ heading, folder: true });
-  if (v) await bm.create({ parentId, title: v.title, ...(index === undefined ? {} : { index }) });
+  return v && bm.create({ parentId, title: v.title, ...(index === undefined ? {} : { index }) });
 }
 
 async function renameFolder(f) {
@@ -334,11 +358,15 @@ function linkNode(b, kind, parents) {
 
 // virtual: not a real folder of its own (Pages) → add only.
 // fixed: a folder the layout depends on (Bookmarks bar, Archive) → no rename/delete.
+// Sections get "remove from page" instead of delete: the folder and its links stay in
+// bookmarks and can be added back from "+ Add to page". Groups inside a section can
+// still be deleted.
 function folderActs(f, { section = false, virtual = false, fixed = false } = {}) {
   const acts = el("span", { className: "acts" }, actBtn("+", "Add link", () => addLink(f.id)));
   if (section && !virtual) acts.append(actBtn("⊞", "Add group", () => addFolder(f.id, "New group")));
-  if (!virtual && !fixed) acts.append(actBtn("✎", "Rename", () => renameFolder(f)),
-                                      actBtn("✕", "Delete", () => deleteFolder(f)));
+  if (!virtual && !fixed) acts.append(actBtn("✎", "Rename", () => renameFolder(f)));
+  if (section) acts.append(actBtn("✕", "Remove from page", () => removeCard(f.id, f.title)));
+  else if (!virtual && !fixed) acts.append(actBtn("✕", "Delete", () => deleteFolder(f)));
   return acts;
 }
 
@@ -367,22 +395,82 @@ function groupNode(f, parents) {
 }
 
 function cardNode(f, opts = {}) {
-  const card = el("div", { className: "card", dataset: { id: f.id } });
-  const head = el("div", { className: "card-head", draggable: true, title: "Click to collapse · drag to move" },
-    el("h2", { textContent: f.title }), folderActs(f, { section: true, ...opts }));
   const body = dropZone(el("div", { className: "body" }), f.id);
+  const card = cardShell(f.id, [el("h2", { textContent: f.title })], folderActs(f, { section: true, ...opts }), body);
   renderChildren(f.children, body, [card]);
   if (!f.children.length) body.append(el("div", { className: "empty", textContent: "Drop links here or press +" }));
+  return card;
+}
+
+// A widget card: same header behaviour as a section, body owned by widgets.js.
+function widgetCard(def) {
+  const id = widgetKey(def.id);
+  const ui = widgetBody(def);
+  const acts = el("span", { className: "acts" }, actBtn("↻", "Refresh", () => refreshWidget(def, true)));
+  if (def.link) acts.append(actBtn("↗", "Open", () => window.open(def.link, "_blank")));
+  acts.append(actBtn("✕", "Remove from page", () => removeCard(id, def.title)));
+  const card = cardShell(id, [el("h2", { textContent: def.title }, ui.count)], acts, ui.body, "widget");
+  const size = layout.sizes[id] || {};
+  ui.body.style.height = size.height ? `${size.height}px` : "";
+  ui.body.classList.toggle("sized", !!size.height);
+  if (def.resizable) card.append(resizeGrip(card, id, ui.body));
+  return card;
+}
+
+// Bottom-right grip: drag sideways to span more columns, down/up to set the height.
+// Double-click goes back to the natural size.
+function resizeGrip(card, id, body) {
+  const grip = el("div", { className: "grip", title: "Drag to resize · double-click to reset" });
+  grip.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    const { colW, gap, n } = columnMetrics();
+    const col = Number(card.parentElement.dataset.col);
+    const left = card.getBoundingClientRect().left;
+    const bodyTop = body.getBoundingClientRect().top;
+    card.classList.add("resizing");
+    const move = ev => {
+      const span = Math.max(1, Math.min(n - col, Math.round((ev.clientX - left + gap) / (colW + gap))));
+      const height = Math.max(80, Math.round((ev.clientY - bodyTop) / 10) * 10);
+      layout.sizes[id] = { span, height };
+      body.style.height = `${height}px`;
+      body.classList.add("sized");
+      arrange();
+    };
+    const up = () => {
+      grip.removeEventListener("pointermove", move);
+      card.classList.remove("resizing");
+      saveLayout();
+      saveSnapshot();
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up, { once: true });
+  });
+  grip.addEventListener("dblclick", () => {
+    delete layout.sizes[id];
+    body.style.height = "";
+    body.classList.remove("sized");
+    saveLayout();
+    arrange();
+  });
+  return grip;
+}
+
+// Collapsible, draggable section card around any body.
+function cardShell(id, title, acts, body, extraClass = "") {
+  const card = el("div", { className: `card ${extraClass}`.trim(), dataset: { id } });
+  const head = el("div", { className: "card-head", draggable: true, title: "Click to collapse · drag to move" },
+    ...title, acts);
   card.append(head, body);
 
   head.addEventListener("click", e => {
     if (e.target.closest(".act")) return;
-    layout.collapsed.has(f.id) ? layout.collapsed.delete(f.id) : layout.collapsed.add(f.id);
-    card.classList.toggle("collapsed", layout.collapsed.has(f.id));
+    layout.collapsed.has(id) ? layout.collapsed.delete(id) : layout.collapsed.add(id);
+    card.classList.toggle("collapsed", layout.collapsed.has(id));
     saveLayout();
   });
   head.addEventListener("dragstart", e => {
-    e.dataTransfer.setData(SECTION_TYPE, f.id);
+    e.dataTransfer.setData(SECTION_TYPE, id);
     e.dataTransfer.effectAllowed = "move";
     card.classList.add("dragging");
     document.body.classList.add("dragging-section");
@@ -392,8 +480,150 @@ function cardNode(f, opts = {}) {
     document.body.classList.remove("dragging-section");
     clearDropMarks();
   });
-  card.classList.toggle("collapsed", layout.collapsed.has(f.id));
+  card.classList.toggle("collapsed", layout.collapsed.has(id));
   return card;
+}
+
+// ---------- cards on the page ----------
+
+const onPage = id => layout.cols.some(c => c.includes(id));
+
+// Rough height of a card, to pick the emptiest column for a new one.
+function cardWeight(id) {
+  if (isWidgetKey(id)) return 6;
+  const n = state.nodes?.get(id);
+  return 2 + (n?.children || []).length;
+}
+
+function placeCard(id) {
+  if (onPage(id)) return;
+  fitColumns();
+  const weight = col => col.reduce((n, c) => n + cardWeight(c), 0);
+  const col = layout.cols.reduce((a, b) => (weight(b) < weight(a) ? b : a));
+  const ai = col.indexOf(state.archive?.id);
+  ai === -1 ? col.push(id) : col.splice(ai, 0, id); // keep Archive at the bottom
+  layout.collapsed.delete(id);
+  saveLayout();
+  load();
+}
+
+function removeCard(id, title) {
+  const ci = layout.cols.findIndex(c => c.includes(id));
+  if (ci === -1) return;
+  const i = layout.cols[ci].indexOf(id);
+  layout.cols[ci].splice(i, 1);
+  saveLayout();
+  load();
+  toast(`Removed “${title}” from the page`, () => {
+    if (onPage(id)) return;
+    layout.cols[Math.min(ci, layout.cols.length - 1)].splice(i, 0, id);
+    saveLayout();
+    load();
+  });
+}
+
+function addWidget(def) {
+  // Ask for host access right away, while we still have the click's user gesture.
+  if (def.origins?.length) chrome.permissions.request({ origins: def.origins }, () => refreshWidget(def, true));
+  placeCard(widgetKey(def.id));
+}
+
+// "+ Add to page": every bookmark folder and widget, each with Add / Remove. Stays open so
+// you can add several; the page updates behind it.
+const addDlg = $("#add-dlg");
+
+const ICONS = {
+  folder: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  widget: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>',
+  chevron: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>',
+};
+const svgNode = (markup, className) => { const n = el("span", { className }); n.innerHTML = markup; return n; }; // static markup only
+
+// Add / Added toggle for a widget.
+function toggleButton(id, add, title) {
+  const b = el("button", { type: "button", className: "pill" });
+  const sync = () => {
+    const on = onPage(id);
+    b.textContent = on ? "Added" : "Add";
+    b.classList.toggle("on", on);
+    b.title = on ? "Remove from page" : "Add to page";
+  };
+  b.addEventListener("click", () => { onPage(id) ? removeCard(id, title) : add(); sync(); });
+  sync();
+  return b;
+}
+
+function galleryItem({ icon, title, desc, action }) {
+  return el("div", { className: "wg-item" },
+    svgNode(icon, "wg-ico"),
+    el("div", { className: "wg-text" },
+      el("div", { className: "wg-title", textContent: title }),
+      desc ? el("div", { className: "wg-desc", textContent: desc }) : ""),
+    action);
+}
+
+function openAddDialog() {
+  const folder = galleryItem({ icon: ICONS.folder, title: "Bookmarks folder",
+    desc: "Links from one of your bookmark folders.", action: svgNode(ICONS.chevron, "wg-go") });
+  folder.classList.add("clickable");
+  folder.tabIndex = 0;
+  folder.addEventListener("click", showFolderPicker);
+  folder.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showFolderPicker(); } });
+  const widgets = [...WIDGETS.values()].map(d => galleryItem({ icon: d.icon || ICONS.widget, title: d.title,
+    desc: d.description, action: toggleButton(widgetKey(d.id), () => addWidget(d), d.title) }));
+  $("#wg-list").replaceChildren(folder, ...widgets);
+  showAddView("main");
+  addDlg.showModal();
+  folder.focus();
+}
+
+function showAddView(view) {
+  $("#add-main").classList.toggle("hidden", view !== "main");
+  $("#add-pick").classList.toggle("hidden", view !== "pick");
+}
+
+// Step 2 of "Bookmarks folder": pick which folder. Folders already on the page are marked.
+function showFolderPicker() {
+  const rows = [];
+  const row = (id, title, count, depth, path) => {
+    const on = onPage(id);
+    const b = el("button", { type: "button", className: "fp-row", disabled: on, style: `--depth:${depth}`, dataset: { path: path.toLowerCase() } },
+      svgNode(ICONS.folder, "fp-ico"),
+      el("span", { className: "fp-name", textContent: title }),
+      el("span", { className: on ? "fp-badge" : "fp-count", textContent: on ? "On page" : count }));
+    b.addEventListener("click", () => { placeCard(id); addDlg.close(); });
+    rows.push(b);
+  };
+  const walk = (f, depth, path) => {
+    for (const c of f.children || []) {
+      if (!isFolder(c) || c.id === state.fav?.id) continue;
+      row(c.id, c.title, countLinks(c), depth, `${path} ${c.title}`);
+      walk(c, depth + 1, `${path} ${c.title}`);
+    }
+  };
+  for (const r of state.root?.children || []) {
+    if (r.id === state.other?.id) {
+      const n = (r.children || []).filter(c => c.url).length;
+      if (n) row(r.id, "Pages", n, 0, "pages");
+      walk(r, 0, ""); // Other bookmarks' folders are top level
+    } else if ((r.children || []).length) {
+      const name = r.id === state.bar?.id ? "Bookmarks bar" : r.title;
+      row(r.id, name, countLinks(r), 0, name);
+      walk(r, 1, name);
+    }
+  }
+  $("#af-list").replaceChildren(...(rows.length ? rows : [el("div", { className: "empty", textContent: "No bookmark folders yet." })]));
+  const filter = $("#af-filter");
+  filter.value = "";
+  filter.oninput = () => {
+    const q = filter.value.trim().toLowerCase();
+    for (const r of rows) r.classList.toggle("hidden", !!q && !r.dataset.path.includes(q));
+  };
+  filter.onkeydown = e => {
+    if (e.key === "Enter") { e.preventDefault(); rows.find(r => !r.disabled && !r.classList.contains("hidden"))?.click(); }
+  };
+  showAddView("pick");
+  filter.focus();
 }
 
 // A column accepts section drops: before the card whose vertical middle is below the
@@ -428,12 +658,16 @@ function columnNode(index) {
 
 async function load() {
   const { bar, other, fav, archive } = await loadLayout();
-  const [[otherTree], [barTree]] = await Promise.all([bm.getSubTree(other.id), bm.getSubTree(bar.id)]);
-  const favNode = otherTree.children.find(c => c.id === fav.id);
+  const [root] = await bm.getTree();
+  const nodes = new Map();
+  (function index(n) { nodes.set(n.id, n); (n.children || []).forEach(index); })(root);
+  const otherTree = nodes.get(other.id);
+  const barTree = nodes.get(bar.id);
+  const favNode = nodes.get(fav.id);
   const seen = new Set();
   const dupes = favNode.children.filter(c => c.url && (seen.has(c.url) || !seen.add(c.url)));
   if (dupes.length) { for (const d of dupes) await bm.remove(d.id); return; } // removal re-triggers load
-  Object.assign(state, { bar, other, fav, archive });
+  Object.assign(state, { bar, other, fav, archive, root, nodes });
   state.pinned = new Set(favNode.children.filter(c => c.url).map(c => c.url));
 
   const favs = $("#favorites");
@@ -442,26 +676,39 @@ async function load() {
   const favNodes = favNode.children.filter(c => c.url).map(c => linkNode(c, "fav", []));
   if (!favNodes.length) favNodes.push(el("div", { className: "empty", textContent: "Pin links with ☆ or drag them here" }));
 
-  // Every section, in bookmark order: [folderNode, cardOptions]
-  const list = [];
-  const loose = otherTree.children.filter(c => c.url);
-  if (loose.length) list.push([{ id: other.id, title: "Pages", children: loose }, { virtual: true }]);
-  if (barTree.children.length) list.push([{ ...barTree, title: "Bookmarks bar" }, { fixed: true }]);
-  for (const c of otherTree.children) {
-    if (isFolder(c) && c.id !== fav.id && c.id !== archive?.id) list.push([c, {}]);
-  }
-  const archiveNode = archive && otherTree.children.find(c => c.id === archive.id);
-  if (archiveNode) list.push([archiveNode, { fixed: true }]);
-
   await loadSavedLayout();
-  placeNewSections(list.map(([f]) => f), archive?.id);
+  if (layout.version < LAYOUT_VERSION) upgradeLayout(otherTree, barTree);
 
-  const cards = new Map(list.map(([f, opts]) => [f.id, cardNode(f, opts)]));
+  // The card for a folder id: [folderNode, cardOptions], or null if it's gone.
+  const folderCard = id => {
+    const n = nodes.get(id);
+    if (!n || n.url) return null;
+    if (id === other.id) return [{ id, title: "Pages", children: n.children.filter(c => c.url) }, { virtual: true }];
+    if (id === bar.id) return [{ ...n, title: "Bookmarks bar" }, { fixed: true }];
+    return [n, { fixed: id === archive?.id }];
+  };
+
+  const widgets = [];
+  let pruned = false;
   const colNodes = layout.cols.map((ids, i) => {
     const col = columnNode(i);
-    for (const id of ids) if (cards.has(id)) col.append(cards.get(id));
+    for (const id of [...ids]) {
+      if (isWidgetKey(id)) {
+        const def = WIDGETS.get(id.slice("widget:".length));
+        if (def) { col.append(widgetCard(def)); widgets.push(def); } // unregistered (no local file): keep its spot
+        continue;
+      }
+      const card = folderCard(id);
+      if (card) col.append(cardNode(...card));
+      else { ids.splice(ids.indexOf(id), 1); pruned = true; } // folder deleted elsewhere
+    }
     return col;
   });
+  if (pruned) saveLayout();
+  if (!colNodes.some(c => c.children.length)) {
+    colNodes[0].append(el("div", { className: "card empty-page" },
+      el("div", { className: "empty", textContent: "Nothing here yet. Use “+ Add to page” to add bookmark folders and widgets." })));
+  }
 
   // Commit everything in one synchronous step (no awaits above this point touch the DOM),
   // so the browser never paints a half-rendered page.
@@ -471,9 +718,88 @@ async function load() {
   sections.style.setProperty("--cols", layout.columns);
   sections.replaceChildren(...colNodes);
   $("#col-count").textContent = layout.columns;
+  arrange();
+  observeCards();
   markReady();
   saveSnapshot();
+  for (const d of widgets) refreshWidget(d);
+}
 
+// Before v2 every top-level folder showed automatically. Keep exactly what was on the
+// page: lay out anything the old version would have auto-placed, then drop what was
+// hidden or never added.
+function upgradeLayout(otherTree, barTree) {
+  const defaults = [];
+  if (otherTree.children.some(c => c.url)) defaults.push({ id: otherTree.id, children: otherTree.children.filter(c => c.url) });
+  if (barTree.children.length) defaults.push(barTree);
+  for (const c of otherTree.children) {
+    if (isFolder(c) && c.id !== state.fav.id && c.id !== state.archive?.id) defaults.push(c);
+  }
+  const archiveNode = state.archive && state.nodes.get(state.archive.id);
+  if (archiveNode) defaults.push(archiveNode);
+  placeNewSections(defaults, state.archive?.id);
+  const { widgets = [], hidden = [] } = layout.legacy || {};
+  layout.cols = layout.cols.map(c => c.filter(id =>
+    isWidgetKey(id) ? widgets.includes(id.slice("widget:".length)) : !hidden.includes(id)));
+  layout.version = LAYOUT_VERSION;
+  saveLayout();
+}
+
+// ---------- column layout ----------
+// Cards are positioned by hand (a small masonry) so a resized widget can span several
+// columns. Each column is still its own element holding its cards, which keeps drag and
+// drop and the saved order simple; arrange() only sets positions. Cards are placed row by
+// row across the columns, and a wide card starts below everything in the columns it covers.
+const GAP = 18;
+
+function columnMetrics() {
+  const sec = $("#sections");
+  const n = matchMedia("(max-width: 760px)").matches ? 1 : layout.columns;
+  const W = sec.clientWidth;
+  return { sec, n, W, gap: GAP, colW: (W - GAP * (n - 1)) / n };
+}
+
+function arrange() {
+  const { sec, n, W, gap, colW } = columnMetrics();
+  const cols = [...sec.querySelectorAll(":scope > .col")];
+  if (!cols.length || !W) return;
+  const single = n === 1;
+  const queues = cols.map(c => [...c.querySelectorAll(":scope > .card")]);
+  const bottoms = new Array(n).fill(0);
+  cols.forEach((c, i) => {
+    c.style.left = `${single ? 0 : i * (colW + gap)}px`;
+    c.style.width = `${single ? W : colW}px`;
+  });
+  const place = (card, c) => {
+    const span = single ? 1 : Math.max(1, Math.min(layout.sizes[card.dataset.id]?.span || 1, n - c));
+    const lane = single ? 0 : c;
+    const top = Math.max(...bottoms.slice(lane, lane + span));
+    card.style.width = `${span * colW + (span - 1) * gap}px`;
+    card.style.top = `${top}px`;
+    const h = card.offsetHeight;
+    for (let k = lane; k < lane + span; k++) bottoms[k] = top + h + gap;
+  };
+  if (single) queues.forEach((q, c) => q.forEach(card => place(card, c)));
+  else {
+    for (let row = 0; queues.some(q => q.length > row); row++) {
+      queues.forEach((q, c) => { if (q[row]) place(q[row], c); });
+    }
+  }
+  sec.style.height = `${Math.max(0, ...bottoms.map(b => b - gap))}px`;
+}
+
+// Re-run when anything changes size: content loading, collapsing, the window.
+let arrangeQueued = false;
+const queueArrange = () => {
+  if (arrangeQueued) return;
+  arrangeQueued = true;
+  requestAnimationFrame(() => { arrangeQueued = false; arrange(); });
+};
+const cardObserver = new ResizeObserver(queueArrange);
+function observeCards() {
+  cardObserver.disconnect();
+  cardObserver.observe($("#sections"));
+  document.querySelectorAll("#sections .card").forEach(c => cardObserver.observe(c));
 }
 
 // Swap freshly built <img> nodes for already-loaded ones with the same src, so icons
@@ -510,6 +836,7 @@ function saveSnapshot() {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
       fav: $("#favorites").innerHTML,
       sections: $("#sections").innerHTML,
+      height: $("#sections").style.height,
       cols: layout.columns,
     }));
   } catch { /* storage full or unavailable: just skip the snapshot */ }
@@ -521,6 +848,7 @@ function paintSnapshot() {
     if (!snap) return;
     $("#favorites").innerHTML = snap.fav;
     $("#sections").innerHTML = snap.sections;
+    $("#sections").style.height = snap.height || "";
     $("#sections").style.setProperty("--cols", snap.cols);
     $("#col-count").textContent = snap.cols;
     markReady();
@@ -556,7 +884,8 @@ function tick() {
 
 $("#col-minus").addEventListener("click", () => setColumns(layout.columns - 1));
 $("#col-plus").addEventListener("click", () => setColumns(layout.columns + 1));
-$("#add-section").addEventListener("click", () => addFolder(state.other.id, "New section", state.archive?.index));
+$("#add-card").addEventListener("click", openAddDialog);
+$("#add-back").addEventListener("click", () => showAddView("main"));
 $("#manage").addEventListener("click", e => {
   e.preventDefault();
   chrome.tabs.create({ url: `chrome://bookmarks/?id=${state.other.id}` });
