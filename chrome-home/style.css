@@ -389,15 +389,19 @@ summary { display: flex; align-items: center; gap: 6px; }
 #footer button:hover, #footer a:hover { color: var(--text); border-color: var(--accent); }
 
 /* ---- editor dialog ---- */
+/* Every popup (editor, settings, add to page, merge confirm) shares one look:
+   blurred page behind, soft shadow, the command bar's entry animation. */
 dialog {
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 18px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .08);
   background: var(--card);
   color: var(--text);
   width: 420px;
   padding: 20px;
 }
-dialog::backdrop { background: rgba(0, 0, 0, .3); }
+dialog[open] { animation: cmd-in .16s cubic-bezier(.2, .9, .3, 1.2); }
+dialog::backdrop { background: rgba(20, 20, 30, .18); backdrop-filter: blur(6px); }
 dialog h3 { margin: 0 0 14px; font-size: 15px; }
 dialog label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 dialog input {
@@ -581,39 +585,50 @@ dialog#settings { width: min(720px, calc(100vw - 48px)); }
 #settings h3 + h4 { margin-top: 0; }
 #settings .hint { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
 #settings code { font-size: 11px; padding: 0 4px; border-radius: 4px; background: var(--hover); }
-#sc-list { outline: none; display: flex; flex-direction: column; gap: 6px; max-height: 34vh; overflow-y: auto; }
-.sc-row { display: grid; grid-template-columns: 92px 150px 1fr 22px; gap: 6px; align-items: center; }
-#settings .sc-row input { margin: 0; padding: 6px 8px; font-size: 13px; }
-#settings .sc-row .sc-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.sc-row.bad input { border-color: #d64545; }
-.sc-tools { display: flex; justify-content: space-between; margin-top: 8px; }
-.sc-tools button {
-  padding: 5px 10px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--muted);
-  background: transparent;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  cursor: pointer;
+#sc-list { outline: none; display: flex; flex-direction: column; gap: 2px; max-height: 40vh; overflow-y: auto; margin: 0 -8px; padding: 2px 8px; }
+.sc-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 18px; }
+#settings .sc-head h4 { margin: 0 0 4px; }
+.sc-link { padding: 2px 6px; font: inherit; font-size: 13px; font-weight: 500; color: var(--accent); background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
+.sc-link:hover { background: var(--hover); }
+.sc-link.muted { color: var(--muted); font-weight: 400; font-size: 12px; }
+.sc-foot { display: flex; justify-content: flex-end; margin-top: 6px; }
+
+.sc-row { position: relative; display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 9px; cursor: pointer; outline: none; }
+.sc-row:hover, .sc-row:focus-visible { background: var(--hover); }
+.sc-ico { flex: none; width: 16px; height: 16px; border-radius: 3px; }
+span.sc-ico { background: var(--border); }
+.sc-key {
+  flex: none;
+  min-width: 34px;
+  padding: 1px 7px;
+  font: 12px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
-.sc-tools button:hover { color: var(--text); border-color: var(--accent); }
-#settings label.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--text); }
-#settings label.check input { display: inline; width: auto; margin: 2px 0 0; }
-#settings label.check .hint { display: block; margin: 2px 0 0; }
-#set-error { min-height: 16px; margin: 12px 0 0; font-size: 12px; color: #d64545; }
+.sc-name { flex: none; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.sc-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.sc-acts { display: inline-flex; gap: 2px; visibility: hidden; }
+.sc-row:hover .sc-acts, .sc-row:focus-visible .sc-acts { visibility: visible; }
+
+.sc-edit { display: flex; flex-direction: column; gap: 6px; margin: 2px 0; padding: 10px; background: var(--bg); border: 1px solid var(--accent); border-radius: 10px; }
+.sc-edit-top { display: grid; grid-template-columns: 110px 1fr; gap: 6px; }
+#settings .sc-edit input { margin: 0; padding: 7px 9px; font-size: 13px; background: var(--card); }
+#settings .sc-edit .sc-in-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sc-err { min-height: 0; font-size: 12px; color: #d64545; }
+.sc-err:empty { display: none; }
+.sc-edit-btns { display: flex; justify-content: flex-end; gap: 6px; }
+.sc-edit-btns button { padding: 5px 12px; font: inherit; font-size: 13px; color: var(--text); background: transparent; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.sc-edit-btns .primary { color: #fff; background: var(--accent); border-color: var(--accent); }
 #footer .icon-btn:hover { border-color: transparent; background: var(--hover); }
 
 /* ---- add to page ---- */
 dialog#add-dlg {
   width: min(520px, calc(100vw - 48px));
   padding: 18px;
-  border-radius: 18px;
-  border-color: color-mix(in srgb, var(--border) 70%, transparent);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .08);
-  animation: cmd-in .16s cubic-bezier(.2, .9, .3, 1.2);
 }
-dialog#add-dlg::backdrop { background: rgba(20, 20, 30, .18); backdrop-filter: blur(6px); }
 .dlg-head { display: flex; align-items: center; gap: 6px; margin: 0 0 14px; text-align: left; }
 .dlg-head h3 { flex: 1; margin: 0; font-size: 16px; }
 .dlg-x, .dlg-back {
@@ -800,3 +815,8 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 .cr-group .count { font-weight: 500; }
 .cr-done .cr-ico, .cr-done .cr-status { color: #2f8f46; opacity: .75; }
 @media (prefers-color-scheme: dark) { .cr-done .cr-ico, .cr-done .cr-status { color: #4cc16a; } }
+.cr-rev { flex: none; font-variant-numeric: tabular-nums; }
+@container (max-width: 250px) { .cr-rev { display: none; } }
+#settings label.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--text); cursor: pointer; }
+#settings label.check input { display: inline; flex: none; width: auto; margin: 2px 0 0; }
+#settings label.check .hint { display: block; margin: 2px 0 0; }

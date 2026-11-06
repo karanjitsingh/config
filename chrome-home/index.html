@@ -62,23 +62,18 @@
 
   <dialog id="settings">
     <form method="dialog">
-      <h3>Settings</h3>
+      <header class="dlg-head"><h3>Settings</h3><button class="dlg-x" value="cancel" title="Close" aria-label="Close">✕</button></header>
       <h4>New tab</h4>
       <label class="check"><input id="set-focus" type="checkbox">
         <span>Put the cursor in the homepage, not the address bar
           <span class="hint">The address bar then shows this page's URL instead of staying blank.</span></span></label>
-      <h4>Search shortcuts</h4>
-      <p class="hint">Type the key, then Space or Tab, in the search box. Put <code>%s</code> where the search text goes. These are this homepage's own and separate from Chrome's site search.</p>
-      <div id="sc-list"></div>
-      <div class="sc-tools">
-        <button id="sc-add" type="button">+ Add shortcut</button>
-        <button id="sc-reset" type="button">Reset to defaults</button>
+      <div class="sc-head">
+        <h4>Search shortcuts</h4>
+        <button id="sc-add" type="button" class="sc-link">+ Add</button>
       </div>
-      <p id="set-error"></p>
-      <menu>
-        <button value="ok" class="primary">Save</button>
-        <button value="cancel" formnovalidate>Cancel</button>
-      </menu>
+      <p class="hint">In the search box, type a shortcut's key then Space or Tab. Separate from Chrome's site search.</p>
+      <div id="sc-list"></div>
+      <div class="sc-foot"><button id="sc-reset" type="button" class="sc-link muted">Reset to defaults</button></div>
     </form>
   </dialog>
 

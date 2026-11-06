@@ -19,71 +19,113 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // ---------- dialog ----------
+// Every change saves immediately; there is no Save button.
 const settingsDlg = $("#settings");
 const scList = $("#sc-list");
+let editing = null; // key being edited, "" for a new shortcut
 
-function shortcutRow(key = "", name = "", url = "") {
-  const input = (field, value, placeholder) =>
-    el("input", { className: `sc-${field}`, value, placeholder, autocomplete: "off", spellcheck: false });
-  const del = el("button", { type: "button", className: "act", title: "Delete", textContent: "✕" });
-  const row = el("div", { className: "sc-row" },
-    input("key", key, "key"), input("name", name, "Name"), input("url", url, "https://example.com/search?q=%s"), del);
-  del.addEventListener("click", () => row.remove());
-  return row;
-}
-
-function fillShortcuts(map) {
-  scList.replaceChildren(...Object.entries(map).map(([k, v]) => shortcutRow(k, v.name, v.url)));
-}
-
-// Returns the shortcuts map, or an error string.
-function readShortcuts() {
-  const out = {};
-  for (const row of scList.children) {
-    const key = row.querySelector(".sc-key").value.trim().toLowerCase();
-    const name = row.querySelector(".sc-name").value.trim();
-    const url = row.querySelector(".sc-url").value.trim();
-    row.classList.remove("bad");
-    if (!key && !url) continue; // blank row: ignore
-    const err = !key ? "needs a key"
-      : /\s/.test(key) ? "key can't contain spaces"
-      : out[key] ? `key “${key}” is used twice`
-      : !/^(https?|chrome):\/\//.test(url) ? "URL must start with https:// (or chrome://)"
-      : !url.includes("%s") ? "URL needs %s where the search text goes"
-      : null;
-    if (err) { row.classList.add("bad"); return `${key || "A shortcut"}: ${err}`; }
-    out[key] = { name: name || key, url };
-  }
-  return out;
-}
-
-$("#open-settings").addEventListener("click", () => {
-  fillShortcuts(SEARCH);
-  $("#set-focus").checked = localStorage.focusPage !== "off";
-  $("#set-error").textContent = "";
-  settingsDlg.showModal();
-});
-
-$("#sc-add").addEventListener("click", () => {
-  const row = shortcutRow();
-  scList.append(row);
-  row.querySelector(".sc-key").focus();
-});
-
-$("#sc-reset").addEventListener("click", () => fillShortcuts(SEARCH_DEFAULTS));
-
-settingsDlg.querySelector("form").addEventListener("submit", async e => {
-  if (e.submitter?.value !== "ok") return; // Cancel just closes
-  const map = readShortcuts();
-  if (typeof map === "string") {
-    e.preventDefault(); // keep the dialog open
-    $("#set-error").textContent = map;
-    return;
-  }
+async function saveShortcuts(map) {
   const isDefault = JSON.stringify(map) === JSON.stringify(SEARCH_DEFAULTS);
   if (isDefault) await chrome.storage.local.remove(SHORTCUTS_KEY);
   else await chrome.storage.local.set({ [SHORTCUTS_KEY]: map });
   applyShortcuts(isDefault ? null : map);
-  localStorage.focusPage = $("#set-focus").checked ? "on" : "off";
-  toast("Settings saved");
+}
+
+function engineIcon(url) {
+  let page = url.replace("%s", "");
+  try { page = new URL(page).origin; } catch { /* chrome:// etc. */ }
+  const img = el("img", { className: "sc-ico", src: favicon(page, 32), alt: "", width: 16, height: 16 });
+  img.onerror = () => img.replaceWith(el("span", { className: "sc-ico" }));
+  return img;
+}
+
+const prettyUrl = url => url.replace(/^https?:\/\//, "").replace(/^www\./, "");
+
+function viewRow(key, { name, url }) {
+  const edit = el("button", { type: "button", className: "act", title: "Edit", textContent: "✎" });
+  const del = el("button", { type: "button", className: "act", title: "Delete", textContent: "✕" });
+  const row = el("div", { className: "sc-row", tabIndex: 0, title: "Click to edit" },
+    engineIcon(url),
+    el("span", { className: "sc-key", textContent: key }),
+    el("span", { className: "sc-name", textContent: name }),
+    el("span", { className: "sc-url", textContent: prettyUrl(url) }),
+    el("span", { className: "sc-acts" }, edit, del));
+  const open = () => { editing = key; renderShortcuts(); };
+  row.addEventListener("click", e => { if (!e.target.closest(".act")) open(); });
+  row.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); open(); } });
+  edit.addEventListener("click", open);
+  del.addEventListener("click", async () => {
+    const map = { ...SEARCH };
+    delete map[key];
+    await saveShortcuts(map);
+    renderShortcuts();
+  });
+  return row;
+}
+
+function editRow(key, { name = "", url = "" } = {}) {
+  const input = (cls, value, placeholder) => el("input", { className: cls, value, placeholder, autocomplete: "off", spellcheck: false });
+  const fKey = input("sc-in-key", key, "key");
+  const fName = input("sc-in-name", name, "Name");
+  const fUrl = input("sc-in-url", url, "https://example.com/search?q=%s");
+  const err = el("div", { className: "sc-err" });
+  const save = el("button", { type: "button", className: "primary", textContent: key ? "Save" : "Add" });
+  const cancel = el("button", { type: "button", textContent: "Cancel" });
+  const row = el("div", { className: "sc-edit" },
+    el("div", { className: "sc-edit-top" }, fKey, fName),
+    fUrl, err,
+    el("div", { className: "sc-edit-btns" }, cancel, save));
+
+  const close = () => { editing = null; renderShortcuts(); };
+  const commit = async () => {
+    const k = fKey.value.trim().toLowerCase();
+    const u = fUrl.value.trim();
+    const problem = !k ? "Give it a key, like “gh”"
+      : /\s/.test(k) ? "The key can't contain spaces"
+      : k !== key && SEARCH[k] ? `“${k}” is already used by ${SEARCH[k].name}`
+      : !/^(https?|chrome):\/\//.test(u) ? "The URL must start with https:// (or chrome://)"
+      : !u.includes("%s") ? "Put %s in the URL where the search text goes"
+      : null;
+    if (problem) { err.textContent = problem; return; }
+    // Keep the list order: replace in place when editing.
+    const entries = Object.entries(SEARCH).map(([kk, v]) => kk === key ? [k, { name: fName.value.trim() || k, url: u }] : [kk, v]);
+    if (!key) entries.push([k, { name: fName.value.trim() || k, url: u }]);
+    await saveShortcuts(Object.fromEntries(entries));
+    close();
+  };
+  save.addEventListener("click", commit);
+  cancel.addEventListener("click", close);
+  row.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } // cancel the edit, keep the dialog
+  });
+  queueMicrotask(() => (key ? fName : fKey).focus());
+  return row;
+}
+
+function renderShortcuts() {
+  const rows = Object.entries(SEARCH).map(([k, v]) => (k === editing ? editRow(k, v) : viewRow(k, v)));
+  if (editing === "") rows.unshift(editRow(""));
+  if (!rows.length) rows.push(el("p", { className: "hint", textContent: "No shortcuts. Add one, or reset to defaults." }));
+  scList.replaceChildren(...rows);
+}
+
+$("#open-settings").addEventListener("click", () => {
+  editing = null;
+  renderShortcuts();
+  $("#set-focus").checked = localStorage.focusPage !== "off";
+  settingsDlg.showModal();
+});
+
+$("#set-focus").addEventListener("change", e => {
+  localStorage.focusPage = e.target.checked ? "on" : "off";
+});
+
+$("#sc-add").addEventListener("click", () => { editing = ""; renderShortcuts(); scList.scrollTop = 0; });
+
+$("#sc-reset").addEventListener("click", async () => {
+  if (!confirm("Replace your shortcuts with the defaults?")) return;
+  await saveShortcuts(structuredClone(SEARCH_DEFAULTS));
+  editing = null;
+  renderShortcuts();
 });
