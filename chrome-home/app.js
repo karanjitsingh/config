@@ -193,16 +193,23 @@ addEventListener("blur", hideMenu);
 addEventListener("scroll", hideMenu, true);
 addEventListener("resize", hideMenu);
 
+// Slides up from the bottom, fades out on its own (longer when there's an Undo), and
+// stays while hovered. A new toast replaces the current one in place.
 let toastTimer;
 function toast(msg, undo) {
   const t = $("#toast");
+  const hide = () => t.classList.remove("show");
+  const arm = () => { clearTimeout(toastTimer); toastTimer = setTimeout(hide, undo ? 6000 : 2800); };
   t.querySelector("span").textContent = msg;
+  t.classList.toggle("error", /^couldn't|failed|error/i.test(msg));
   const b = t.querySelector("button");
   b.classList.toggle("hidden", !undo);
-  b.onclick = async () => { t.classList.add("hidden"); await undo(); };
-  t.classList.remove("hidden");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.add("hidden"), 6000);
+  b.onclick = async () => { hide(); await undo(); };
+  t.onmouseenter = () => clearTimeout(toastTimer);
+  t.onmouseleave = arm;
+  if (t.classList.contains("show")) { t.classList.remove("bump"); void t.offsetWidth; t.classList.add("bump"); }
+  t.classList.add("show");
+  arm();
 }
 
 // ---------- bookmark actions ----------
@@ -482,13 +489,14 @@ function cardShell(id, title, acts, body, extraClass = "") {
   head.addEventListener("dragstart", e => {
     draggingCard = card;
     e.dataTransfer.setData(SECTION_TYPE, id);
+    setTimeout(() => card.classList.add("drag-through")); // after the drag starts: let the pointer reach what's beneath
     e.dataTransfer.effectAllowed = "move";
     card.classList.add("dragging");
     document.body.classList.add("dragging-section");
   });
   head.addEventListener("dragend", () => {
     draggingCard = null;
-    card.classList.remove("dragging");
+    card.classList.remove("dragging", "drag-through");
     document.body.classList.remove("dragging-section");
     clearDropMarks();
   });
@@ -675,22 +683,36 @@ function showDropGhost(colIndex, beforeCard) {
 }
 
 function columnNode(index) {
-  const col = el("div", { className: "col", dataset: { col: index } });
-  col.addEventListener("dragover", e => {
-    if (!isSectionDrag(e)) return;
-    e.preventDefault();
-    showDropGhost(index, cardAfterPointer(col, e.clientY));
-  });
-  col.addEventListener("dragleave", e => { if (!e.relatedTarget?.closest?.("#sections")) clearDropMarks(); });
-  col.addEventListener("drop", e => {
-    if (!isSectionDrag(e)) return;
-    e.preventDefault();
-    clearDropMarks();
-    const after = cardAfterPointer(col, e.clientY);
-    moveSection(e.dataTransfer.getData(SECTION_TYPE), index, after?.dataset.id);
-  });
-  return col;
+  return el("div", { className: "col", dataset: { col: index } });
 }
+
+// Which column a card drop lands in comes from the pointer's x position, not from the
+// element under it: a wide card belongs to its first column but covers others, and the
+// dragged card itself would otherwise swallow the pointer.
+function dropSlot(e) {
+  const { sec, n, gap, colW } = columnMetrics();
+  const cols = [...sec.querySelectorAll(":scope > .col")];
+  let ci;
+  if (n === 1) ci = Math.max(0, cols.indexOf(e.target.closest?.(".col"))); // stacked: use the column under the pointer
+  else ci = Math.max(0, Math.min(n - 1, Math.floor((e.clientX - sec.getBoundingClientRect().left + gap / 2) / (colW + gap))));
+  return { ci, before: cols[ci] && cardAfterPointer(cols[ci], e.clientY) };
+}
+
+const sectionsEl = $("#sections");
+sectionsEl.addEventListener("dragover", e => {
+  if (!isSectionDrag(e)) return;
+  e.preventDefault();
+  const { ci, before } = dropSlot(e);
+  showDropGhost(ci, before);
+});
+sectionsEl.addEventListener("dragleave", e => { if (!sectionsEl.contains(e.relatedTarget)) clearDropMarks(); });
+sectionsEl.addEventListener("drop", e => {
+  if (!isSectionDrag(e)) return;
+  e.preventDefault();
+  clearDropMarks();
+  const { ci, before } = dropSlot(e);
+  moveSection(e.dataTransfer.getData(SECTION_TYPE), ci, before?.dataset.id);
+});
 
 async function load() {
   const { bar, other, fav, archive } = await loadLayout();

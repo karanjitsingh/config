@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Home",
-  "version": "4.3",
+  "version": "4.4",
   "description": "New tab page built from your bookmarks, with pinning.",
   "permissions": [
     "bookmarks",
@@ -10,7 +10,8 @@
     "activeTab",
     "history",
     "tabs",
-    "search"
+    "search",
+    "scripting"
   ],
   "chrome_url_overrides": {
     "newtab": "index.html"
@@ -31,5 +32,8 @@
   },
   "optional_host_permissions": [
     "https://*/*"
-  ]
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
 }

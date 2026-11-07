@@ -50,4 +50,4 @@ Favorites, Archive, and the Bookmarks bar are matched by name/role, so they can'
 
 Widgets are added from **+ Add to page** and become live cards in the columns. It drags, collapses and keeps its spot like a section. Widgets register themselves through `registerWidget()` in `widgets.js`, which documents the API. Each one declares the hosts it fetches from, and Chrome asks for access when you add it. Results are cached, so a new tab paints instantly and refreshes in the background. A widget that sets `resizable: true` gets a corner grip: drag it sideways to span columns or down to set the height, and double-click it to reset.
 
-Private widgets go in `widgets.local.js`, which is git-ignored like `config.local.js`.
+Private widgets go in `widgets.local.js`, which is git-ignored like `config.local.js`. A widget that needs background work (for example a content script on another site) can add it in `background.local.js`, which `background.js` loads when present.

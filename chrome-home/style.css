@@ -244,8 +244,8 @@ body.navigating .cmd-ico { color: var(--accent); }
 .col { position: absolute; top: 0; height: 100%; border-radius: 14px; }
 .col > .card { position: absolute; left: 0; z-index: 1; } /* above neighbouring column strips, which a wide card overlaps */
 /* Extra drop room under the columns only while a section is being dragged. */
-body.dragging-section #sections { margin-bottom: 60px; }
-body.dragging-section .col { height: calc(100% + 60px); }
+body.dragging-section #sections { padding-bottom: 80px; } /* drop room below the last cards */
+.card.drag-through { pointer-events: none; }
 .card {
   min-width: 0;
   padding: 12px 10px;
@@ -439,19 +439,59 @@ dialog menu .primary { background: var(--accent); border-color: var(--accent); c
 /* ---- toast ---- */
 #toast {
   position: fixed;
+  z-index: 60; /* above cards and the command bar */
   left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
+  bottom: 28px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 16px;
-  background: var(--text);
-  color: var(--bg);
-  border-radius: 10px;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 48px));
+  padding: 9px 10px 9px 14px;
   font-size: 13px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .16), 0 1px 3px rgba(0, 0, 0, .08);
+  opacity: 0;
+  transform: translate(-50%, 14px) scale(.98);
+  pointer-events: none;
+  transition: opacity .18s ease, transform .22s cubic-bezier(.2, .9, .3, 1.2);
 }
-#toast button { border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#toast.bump { animation: toast-bump .2s ease; }
+@keyframes toast-bump { 50% { transform: translate(-50%, 0) scale(1.03); } }
+#toast span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-ico {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #2f8f46;
+  border-radius: 50%;
+}
+#toast.error .toast-ico { background: #d64545; }
+#toast.error .toast-ico::before { content: "!"; }
+#toast.error .toast-ico { font-size: 0; }
+#toast.error .toast-ico::before { font-size: 11px; }
+#toast button {
+  flex: none;
+  padding: 4px 10px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+#toast button:hover { background: var(--hover); }
 
 /* ---- popup ---- */
 body.popup { width: 280px; padding: 12px; }
@@ -840,3 +880,30 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
   border-radius: 14px;
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
+.tix-sev { flex: none; font-variant-numeric: tabular-nums; }
+.tix-sev.hi { color: #d64545; font-weight: 600; }
+.tix-open .cr-ico { color: var(--accent); }
+.tix-pending .cr-ico, .tix-pending .cr-status { color: #c98a0b; }
+.tix-done .cr-ico, .tix-done .cr-status { color: #2f8f46; }
+.tix-change { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--accent); }
+
+/* "✓ Done" on ticket rows: shown on hover, overlaid so rows don't change width. */
+.tix-row { position: relative; }
+.tix-done-btn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  visibility: hidden;
+}
+.tix-row:hover .tix-done-btn { visibility: visible; }
+.tix-done-btn:hover { color: #2f8f46; border-color: #2f8f46; }
