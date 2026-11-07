@@ -111,12 +111,22 @@ function renderShortcuts() {
   scList.replaceChildren(...rows);
 }
 
+// Sidebar sections; remembers the last one you looked at.
+function showPane(name) {
+  for (const t of settingsDlg.querySelectorAll(".set-tab")) t.classList.toggle("on", t.dataset.pane === name);
+  for (const p of settingsDlg.querySelectorAll(".set-pane")) p.hidden = p.dataset.pane !== name;
+  localStorage.settingsPane = name;
+}
+for (const t of settingsDlg.querySelectorAll(".set-tab")) t.addEventListener("click", () => showPane(t.dataset.pane));
+
 $("#open-settings").addEventListener("click", () => {
+  showPane(localStorage.settingsPane || "general");
   editing = null;
   renderShortcuts();
   $("#set-focus").checked = localStorage.focusPage !== "off";
   fillPeekKinds();
   settingsDlg.showModal();
+  document.activeElement?.blur(); // no focus ring on the first item when opened with the mouse
 });
 
 $("#set-focus").addEventListener("change", e => {
@@ -131,14 +141,15 @@ function fillPeekKinds() {
     localStorage.peekKinds = JSON.stringify(cfg);
     localStorage.removeItem("peek");
   }
-  const kinds = [["fav", "Favorites"], ["link", "Bookmarks"], ...[...WIDGETS.values()].map(d => [widgetKey(d.id), d.title])];
+  const kinds = [["fav", "Favorites"], ["link", "Links in bookmark folders"], ...[...WIDGETS.values()].map(d => [widgetKey(d.id), d.title])];
   $("#peek-kinds").replaceChildren(...kinds.map(([key, name]) => {
     const box = el("input", { type: "checkbox", checked: cfg[key] !== false });
     box.addEventListener("change", () => {
       cfg[key] = box.checked;
       localStorage.peekKinds = JSON.stringify(cfg);
     });
-    return el("label", { className: "peek-kind" }, box, el("span", { textContent: name }));
+    box.className = "switch";
+    return el("label", { className: "set-row" }, el("span", { className: "set-text" }, el("b", { textContent: name })), box);
   }));
 }
 
@@ -150,3 +161,19 @@ $("#sc-reset").addEventListener("click", async () => {
   editing = null;
   renderShortcuts();
 });
+
+// ⌘, (Ctrl+, elsewhere) opens these settings; pressing it again while they're open goes
+// on to Chrome's own settings in this tab, which is what ⌘, normally does.
+document.addEventListener("keydown", e => {
+  if (e.key !== "," || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (settingsDlg.open) {
+    settingsDlg.close();
+    // Pages can't link to chrome:// directly, so navigate this tab through the tabs API.
+    chrome.tabs.getCurrent(tab => (tab ? chrome.tabs.update(tab.id, { url: "chrome://settings" }) : chrome.tabs.create({ url: "chrome://settings" })));
+  } else {
+    document.querySelector("dialog[open]")?.close();
+    $("#open-settings").click();
+  }
+}, true);
