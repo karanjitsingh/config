@@ -115,12 +115,32 @@ $("#open-settings").addEventListener("click", () => {
   editing = null;
   renderShortcuts();
   $("#set-focus").checked = localStorage.focusPage !== "off";
+  fillPeekKinds();
   settingsDlg.showModal();
 });
 
 $("#set-focus").addEventListener("change", e => {
   localStorage.focusPage = e.target.checked ? "on" : "off";
 });
+// One toggle per kind of link: favorites, bookmark cards, and each installed widget.
+function fillPeekKinds() {
+  let cfg = {};
+  try { cfg = JSON.parse(localStorage.peekKinds || "{}"); } catch { /* start fresh */ }
+  if (localStorage.peek === "off") { // migrate the old single switch
+    cfg = Object.fromEntries(["fav", "link", ...[...WIDGETS.keys()].map(widgetKey)].map(k => [k, false]));
+    localStorage.peekKinds = JSON.stringify(cfg);
+    localStorage.removeItem("peek");
+  }
+  const kinds = [["fav", "Favorites"], ["link", "Bookmarks"], ...[...WIDGETS.values()].map(d => [widgetKey(d.id), d.title])];
+  $("#peek-kinds").replaceChildren(...kinds.map(([key, name]) => {
+    const box = el("input", { type: "checkbox", checked: cfg[key] !== false });
+    box.addEventListener("change", () => {
+      cfg[key] = box.checked;
+      localStorage.peekKinds = JSON.stringify(cfg);
+    });
+    return el("label", { className: "peek-kind" }, box, el("span", { textContent: name }));
+  }));
+}
 
 $("#sc-add").addEventListener("click", () => { editing = ""; renderShortcuts(); scList.scrollTop = 0; });
 

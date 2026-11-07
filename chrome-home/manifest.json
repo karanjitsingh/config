@@ -11,7 +11,9 @@
     "history",
     "tabs",
     "search",
-    "scripting"
+    "scripting",
+    "declarativeNetRequestWithHostAccess",
+    "declarativeNetRequestFeedback"
   ],
   "chrome_url_overrides": {
     "newtab": "index.html"
@@ -31,7 +33,8 @@
     }
   },
   "optional_host_permissions": [
-    "https://*/*"
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js"

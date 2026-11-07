@@ -655,7 +655,7 @@
   // keystroke (focusing during keydown makes the browser deliver it to the input); if the
   // bar is open but lost focus, typing just refocuses it. ⌘K, "/", and ⌘V also open it.
   document.addEventListener("keydown", e => {
-    if (document.querySelector("dialog[open]")) return;
+    if (document.querySelector("dialog[open]") || document.body.classList.contains("peeking")) return;
     if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
     const printable = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openBar(); }
