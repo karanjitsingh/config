@@ -1,0 +1,4 @@
+# Private files (internal URLs, personal widgets): keep them out of the public repo.
+*.local.js
+local/*
+!local/README.md

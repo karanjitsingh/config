@@ -1,4 +1,4 @@
-# chrome-home
+# ArcTab
 
 Chrome new tab page backed by real bookmarks (migrated from the Arc sidebar).
 
@@ -36,8 +36,8 @@ Favorites, Archive, and the Bookmarks bar are matched by name/role, so they can'
   tabs; inline autocomplete (`Tab`/`→` to accept, `Esc` to drop); a URL navigates, anything
   else searches with your default search engine. `↑↓` move, `Enter` open, `⌘Enter` new tab,
   `Shift+Delete` removes a history suggestion, "Switch to tab" jumps to an open page.
-  Shortcuts: `code` + `Tab`/`Space`, then your query. They live in `config.js`; put private
-  ones in a git-ignored `config.local.js`:
+  Shortcuts: `code` + `Tab`/`Space`, then your query. They live in `src/shared/config.js`; put private
+  ones in a git-ignored `local/config.local.js`:
   `const SEARCH_LOCAL = { code: { name: "Code", url: "https://example.com/search?q=%s" } };`
 - New tabs show the homepage with keyboard focus on the page (not the address bar). Start
   typing (or `/`, `⌘K`, `⌘V`) and an Arc-style command bar appears over a blurred homepage;
@@ -48,6 +48,33 @@ Favorites, Archive, and the Bookmarks bar are matched by name/role, so they can'
 
 ## Widgets
 
-Widgets are added from **+ Add to page** and become live cards in the columns. It drags, collapses and keeps its spot like a section. Widgets register themselves through `registerWidget()` in `widgets.js`, which documents the API. Each one declares the hosts it fetches from, and Chrome asks for access when you add it. Results are cached, so a new tab paints instantly and refreshes in the background. A widget that sets `resizable: true` gets a corner grip: drag it sideways to span columns or down to set the height, and double-click it to reset.
+Widgets are added from **+ Add to page** and become live cards in the columns. It drags, collapses and keeps its spot like a section. Widgets register themselves through `registerWidget()` in `src/widgets/widgets.js`, which documents the API. Each one declares the hosts it fetches from, and Chrome asks for access when you add it. Results are cached, so a new tab paints instantly and refreshes in the background. A widget that sets `resizable: true` gets a corner grip: drag it sideways to span columns or down to set the height, and double-click it to reset.
 
-Private widgets go in `widgets.local.js`, which is git-ignored like `config.local.js`. A widget that needs background work (for example a content script on another site) can add it in `background.local.js`, which `background.js` loads when present.
+Private widgets go in `local/widgets.local.js`, which is git-ignored like the rest of `local/`. A widget that needs background work (for example a content script on another site) can add it in `local/background.local.js`, which `src/background.js` loads when present.
+
+## Layout of the code
+```
+manifest.json
+icons/
+src/
+  background.js        service worker; loads local/background.local.js if present
+  shared/              used by the new tab page and the toolbar popup
+    config.js            default search shortcuts
+    config.merge.js      merges in local/config.local.js
+    shared.js            bookmark layout (Favorites, Archive, migration), favicon helpers
+    style.css
+  newtab/              the homepage (chrome_url_overrides.newtab)
+    index.html           markup and script load order
+    focus.js             moves keyboard focus from the address bar to the page
+    ui.js                DOM helpers, link editor, context menu, toast
+    layout.js            saved layout, cards on the page, Add to page, column layout
+    cards.js             bookmark actions, drag and drop, folder and widget cards
+    peek.js              Arc-style link overlay
+    page.js              builds the page, first paint, clock, footer, startup
+    settings.js          Settings window
+    omnibox.js           command bar (address-bar-like search)
+  widgets/widgets.js   widget framework (registerWidget)
+  popup/               toolbar "Pin to ArcTab" popup
+local/                 git-ignored private files (see local/README.md)
+```
+The scripts are plain (not modules) and share globals, so the order in `src/newtab/index.html` matters.

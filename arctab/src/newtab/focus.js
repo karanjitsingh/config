@@ -27,7 +27,7 @@ if (REOPENING) {
   const method = localStorage.focusMethod || "update";
   chrome.tabs.getCurrent(tab => {
     if (!tab) { document.documentElement.style.visibility = ""; return; }
-    const url = chrome.runtime.getURL(`index.html?focused=${method}`);
+    const url = chrome.runtime.getURL(`src/newtab/index.html?focused=${method}`);
     if (method === "update") chrome.tabs.update(tab.id, { url });
     else chrome.tabs.create({ url, index: tab.index, windowId: tab.windowId, active: true }, () => chrome.tabs.remove(tab.id));
   });

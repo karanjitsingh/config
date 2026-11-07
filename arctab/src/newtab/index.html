@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <title>New Tab</title>
-  <link rel="icon" href="icons/icon32.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="../../icons/icon32.png">
+  <link rel="stylesheet" href="../shared/style.css">
   <script src="focus.js"></script>
 </head>
 <body>
@@ -121,13 +121,18 @@
 
   <div id="toast" role="status" aria-live="polite"><i class="toast-ico">✓</i><span></span><button type="button">Undo</button></div>
 
-  <script src="config.js"></script>
-  <script src="config.local.js"></script>
-  <script src="config.merge.js"></script>
-  <script src="shared.js"></script>
-  <script src="widgets.js"></script>
-  <script src="widgets.local.js"></script>
-  <script src="app.js"></script>
+  <!-- Plain scripts sharing globals; order matters. *.local.js are private and optional. -->
+  <script src="../shared/config.js"></script>
+  <script src="../../local/config.local.js"></script>
+  <script src="../shared/config.merge.js"></script>
+  <script src="../shared/shared.js"></script>
+  <script src="../widgets/widgets.js"></script>
+  <script src="../../local/widgets.local.js"></script>
+  <script src="ui.js"></script>
+  <script src="layout.js"></script>
+  <script src="cards.js"></script>
+  <script src="peek.js"></script>
+  <script src="page.js"></script>
   <script src="settings.js"></script>
   <script src="omnibox.js"></script>
 </body>

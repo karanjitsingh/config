@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Home",
+  "name": "ArcTab",
   "version": "4.4",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnHn8brUWGci2L2GL8zRWcZsNSVYkap4y7xEx6j5WP5Bh/JqPR7tcur0qe0Z+dVHWpn8L+py/VemYsMQ7Ck7Ar8IoCmGKrxMM4789/zRciStZ/d8O5Z2ECHHALE3og/xrhJaauzE5WXOUiGaGczDGQg8TH6m4zkJnL49Kn4h/KRLShHHMXlVU1dV/CoE1UwgJcFRXWPt2ayNJZr4lxSQGgovmKdo5am4b6U9iq7TIXLR9A6rzg+2yXr4HaY3ZZjUbIT3siDW7Q+/Lu+4ujgNszm1dsoTxlj/aooK8TJmqyZPvLKVitDQn0sirPK4TMoCPIXl8H/qQGxJM1uaUgzBvbwIDAQAB",
   "description": "New tab page built from your bookmarks, with pinning.",
   "permissions": [
     "bookmarks",
@@ -16,7 +17,7 @@
     "declarativeNetRequestFeedback"
   ],
   "chrome_url_overrides": {
-    "newtab": "index.html"
+    "newtab": "src/newtab/index.html"
   },
   "icons": {
     "16": "icons/icon16.png",
@@ -25,8 +26,8 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Pin to Home",
-    "default_popup": "popup.html",
+    "default_title": "Pin to ArcTab",
+    "default_popup": "src/popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"
@@ -37,6 +38,6 @@
     "http://*/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background.js"
   }
 }
