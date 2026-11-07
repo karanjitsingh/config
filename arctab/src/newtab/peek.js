@@ -167,6 +167,7 @@ async function peekDiagnostics(url) {
 
 document.addEventListener("click", e => {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if (e.target.closest?.("button, .acts, [role=button]")) return; // ☆ / ✎ / ✕ on a link do their own thing
   const a = e.target.closest?.("a[href]");
   if (!a || !/^https?:/.test(a.href) || a.closest("#cmd-backdrop, dialog, .peek-backdrop")) return;
   if (!peekOn(peekKind(a))) return;

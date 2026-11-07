@@ -112,7 +112,7 @@ let toastTimer;
 function toast(msg, undo) {
   const t = $("#toast");
   const hide = () => t.classList.remove("show");
-  const arm = () => { clearTimeout(toastTimer); toastTimer = setTimeout(hide, undo ? 6000 : 2800); };
+  const arm = () => { clearTimeout(toastTimer); toastTimer = setTimeout(hide, undo ? 5000 : 2500); };
   t.querySelector("span").textContent = msg;
   t.classList.toggle("error", /^couldn't|failed|error/i.test(msg));
   const b = t.querySelector("button");

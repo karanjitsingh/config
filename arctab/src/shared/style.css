@@ -440,12 +440,12 @@ dialog menu .primary { background: var(--accent); border-color: var(--accent); c
 #toast {
   position: fixed;
   z-index: 60; /* above cards and the command bar */
-  left: 50%;
-  bottom: 28px;
+  right: 24px;
+  bottom: 24px;
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: min(560px, calc(100vw - 48px));
+  max-width: min(440px, calc(100vw - 48px));
   padding: 9px 10px 9px 14px;
   font-size: 13px;
   color: var(--text);
@@ -455,13 +455,13 @@ dialog menu .primary { background: var(--accent); border-color: var(--accent); c
   border-radius: 14px;
   box-shadow: 0 12px 36px rgba(0, 0, 0, .16), 0 1px 3px rgba(0, 0, 0, .08);
   opacity: 0;
-  transform: translate(-50%, 14px) scale(.98);
+  transform: translateY(14px) scale(.98);
   pointer-events: none;
   transition: opacity .18s ease, transform .22s cubic-bezier(.2, .9, .3, 1.2);
 }
-#toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#toast.show { opacity: 1; transform: none; pointer-events: auto; }
 #toast.bump { animation: toast-bump .2s ease; }
-@keyframes toast-bump { 50% { transform: translate(-50%, 0) scale(1.03); } }
+@keyframes toast-bump { 50% { transform: scale(1.03); } }
 #toast span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toast-ico {
   display: grid;
@@ -927,9 +927,9 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
   height: calc(100vh - 64px);
   overflow: hidden;
   background: var(--card);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: 0; /* a light 1px border showed as a white rim around dark pages */
   border-radius: 16px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, .3), 0 2px 8px rgba(0, 0, 0, .1);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .3), 0 2px 8px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .08);
   will-change: transform, opacity;
 }
 @keyframes peek-in { from { opacity: 0; transform: translateY(16px) scale(.98); } }
@@ -953,8 +953,8 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 }
 .peek-btn.wide { padding: 0 10px; color: var(--accent); font-weight: 500; }
 .peek-btn:hover { background: var(--hover); color: var(--text); }
-.peek-body { position: relative; flex: 1; background: #fff; }
-.peek-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.peek-body { position: relative; flex: 1; overflow: hidden; background: var(--card); }
+.peek-frame { display: block; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; }
 .peek-bar { position: relative; }
 .peek-backdrop.loading .peek-bar::after {
   content: "";
