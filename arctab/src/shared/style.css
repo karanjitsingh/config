@@ -1136,7 +1136,9 @@ body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
   gap: 10px;
   max-width: min(780px, calc(100vw - 48px));
   margin-top: 16px;
-  animation: cmd-in .2s cubic-bezier(.2, .9, .3, 1.2);
+  /* No animation here: an animating parent's opacity cuts the tiles' backdrop blur off
+     from the page until it finishes, so they'd flash solid and then turn see-through.
+     Each tile animates itself instead. */
 }
 .fav-strip .fav {
   width: 84px;
@@ -1150,6 +1152,7 @@ body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
   color: var(--muted);
   font-size: 11.5px;
   transition: transform .15s cubic-bezier(.2, .9, .3, 1.4), box-shadow .15s, color .12s, border-color .12s;
+  animation: cmd-in .2s cubic-bezier(.2, .9, .3, 1.2) backwards;
 }
 .fav-strip .fav:hover, .fav-strip .fav:focus-visible {
   transform: translateY(-2px);
@@ -1169,3 +1172,4 @@ body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
 /* Favorites step aside once you start typing (or pick a shortcut pill). */
 #cmd-backdrop:has(#search:not(:placeholder-shown), #kw-pill:not(.hidden)) .fav-strip { display: none; }
 .fav-strip .fav > .letter { background: var(--sel); }
+body.overlay .fav-strip:not(:empty) { margin-top: 28px; }
