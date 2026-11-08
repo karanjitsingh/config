@@ -1173,3 +1173,86 @@ body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
 #cmd-backdrop:has(#search:not(:placeholder-shown), #kw-pill:not(.hidden)) .fav-strip { display: none; }
 .fav-strip .fav > .letter { background: var(--sel); }
 body.overlay .fav-strip:not(:empty) { margin-top: 28px; }
+
+/* ======================================================================
+   Homepage polish: a soft accent wash behind everything, a lighter clock,
+   cards that float a little instead of sitting on hard borders, and favorite
+   tiles that match the ones under the quick search bar.
+   ====================================================================== */
+body:not(.overlay) {
+  background:
+    radial-gradient(1100px 520px at 50% -140px, color-mix(in srgb, var(--accent) 13%, transparent), transparent 72%),
+    radial-gradient(700px 420px at 100% 0, color-mix(in srgb, #ff9f6e 7%, transparent), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+#clock {
+  font-size: 64px;
+  font-weight: 200;
+  letter-spacing: -2px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+#date { font-size: 13px; letter-spacing: .2px; margin-top: 6px; }
+
+#cmd-open {
+  padding: 11px 16px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: blur(16px);
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 20px rgba(0, 0, 0, .05);
+  transition: border-color .15s, box-shadow .15s;
+}
+#cmd-open:hover { box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 10px 28px rgba(0, 0, 0, .08); }
+
+/* Favorites: icon on a soft square, quiet label, lift on hover. */
+#favorites .fav {
+  width: 92px;
+  gap: 8px;
+  padding: 12px 6px 9px;
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .04);
+  transition: transform .15s cubic-bezier(.2, .9, .3, 1.4), box-shadow .15s, color .12s, border-color .12s;
+}
+#favorites .fav:hover {
+  transform: translateY(-2px);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .05), 0 12px 28px rgba(0, 0, 0, .09);
+}
+#favorites .fav > img, #favorites .fav > .emoji, #favorites .fav > .letter {
+  box-sizing: content-box;
+  padding: 7px;
+  background: var(--bg);
+  border-radius: 11px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
+}
+#favorites .fav > .letter { background: var(--sel); }
+#favorites .fav .label { flex: none; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Cards float: softer border, gentle shadow, a touch more air. */
+.card {
+  padding: 14px 10px 12px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .035), 0 6px 22px rgba(0, 0, 0, .04);
+}
+.card h2 { font-size: 11px; letter-spacing: .9px; }
+.link { padding: 6px 9px; border-radius: 9px; transition: background .1s; }
+.link img { border-radius: 4px; }
+.link:hover { background: color-mix(in srgb, var(--accent) 7%, var(--hover)); }
+
+/* Footer stays out of the way until you reach for it. */
+#footer { opacity: .55; transition: opacity .2s; }
+#footer:hover, #footer:focus-within { opacity: 1; }
+
+@media (prefers-color-scheme: dark) {
+  #cmd-open, #favorites .fav, .card { box-shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 8px 24px rgba(0, 0, 0, .18); }
+  #favorites .fav:hover { box-shadow: 0 2px 4px rgba(0, 0, 0, .3), 0 14px 32px rgba(0, 0, 0, .3); }
+}
