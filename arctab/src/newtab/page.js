@@ -199,12 +199,20 @@ function showHome() {
   if (homeShown) return;
   homeShown = true;
   document.body.classList.remove("search-only");
+  $("#so-favs").replaceChildren();
   paintSnapshot();
   load().catch(e => showError(String(e?.message || e)));
   setTimeout(markReady, 600); // never stay hidden if something stalls
 }
 
+// Settings → "Show favorites with the search bar": plain tiles under the bar on a
+// search-only tab. Clicking one goes there in this tab; ⌘-click opens a new tab.
+function searchFavs() {
+  if (localStorage.searchFavs === "off") return;
+  favoriteStrip($("#so-favs")).then(() => { if (homeShown) $("#so-favs").replaceChildren(); });
+}
+
 if (REOPENING) { /* focus.js is replacing this tab */ }
 else if (!bm) showError("The extension doesn't have bookmarks permission yet. Open chrome://extensions and click the reload icon on ArcTab.");
-else if (localStorage.newTabMode === "search") { document.body.classList.add("search-only"); markReady(); }
+else if (localStorage.newTabMode === "search") { document.body.classList.add("search-only"); markReady(); searchFavs(); }
 else showHome();

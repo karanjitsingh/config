@@ -19,6 +19,17 @@ const el = (tag, attrs = {}, ...children) => {
 // Tell the page script to remove this frame.
 function closeOverlay() { parent.postMessage("arctab:close", "*"); }
 
+// Settings → "Show favorites in the Ctrl+T search". Click opens a new tab and closes the
+// overlay; ⌘-click opens it in the background and keeps the overlay up.
+// Runs after the shared scripts below have loaded (favoriteStrip lives in shared.js).
+if (localStorage.overlayFavs !== "off") addEventListener("DOMContentLoaded", () => {
+  favoriteStrip(document.getElementById("so-favs"), (url, e) => {
+    const bg = e.metaKey || e.ctrlKey;
+    chrome.tabs.create({ url, active: !bg });
+    if (!bg) closeOverlay();
+  }).catch(e => console.warn("[arctab] favorites:", e));
+});
+
 // "ArcTab Home" from the overlay opens the homepage in a new tab.
 function showHome() {
   chrome.tabs.create({ url: chrome.runtime.getURL("src/newtab/index.html") });

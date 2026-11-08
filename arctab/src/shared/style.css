@@ -1125,3 +1125,16 @@ body.search-only #cmd-backdrop {
     radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
     var(--bg);
 }
+.fav-strip { display: none; }
+body.search-only #cmd-backdrop, body.overlay #cmd-backdrop { flex-direction: column; justify-content: flex-start; align-items: center; }
+body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: min(780px, calc(100vw - 48px));
+  margin-top: 28px;
+  animation: cmd-in .2s ease-out;
+}
+/* Favorites step aside once you start typing (or pick a shortcut pill). */
+#cmd-backdrop:has(#search:not(:placeholder-shown), #kw-pill:not(.hidden)) .fav-strip { display: none; }

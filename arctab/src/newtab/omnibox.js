@@ -300,11 +300,52 @@
     }
     rows = next;
     sel = 0;
+    // Nothing of yours matched: fill in with Google's suggestions, like the address bar.
+    if (!sc && !next.some(r => r.url) && !looksLikeUrl(q)) googleSuggest(q, my);
     if (completion && input.value === typed) {
       input.value = typed + completion.text.slice(typed.length);
       input.setSelectionRange(typed.length, input.value.length);
     }
     render(q);
+  }
+
+  // Google's search suggestions (the same endpoint Chrome's address bar uses).
+  // client=chrome also says which items are sites (NAVIGATION) rather than searches.
+  // Needs host access, which the optional https permission grants; skipped without it.
+  const suggestCache = new Map();
+  let suggestTimer;
+  async function fetchSuggest(q) {
+    const res = await fetch(`https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(q)}`);
+    // This endpoint has answered in Latin-1 for some locales; trust the header's charset.
+    const charset = /charset=([\w-]+)/i.exec(res.headers.get("content-type") || "")?.[1] || "utf-8";
+    const [, items = [], descs = [], , meta = {}] = JSON.parse(new TextDecoder(charset).decode(await res.arrayBuffer()));
+    const types = meta["google:suggesttype"] || [];
+    return items.map((text, i) => ({ text, desc: descs[i] || "", nav: types[i] === "NAVIGATION" }));
+  }
+  function googleSuggest(q, my) {
+    clearTimeout(suggestTimer);
+    suggestTimer = setTimeout(async () => {
+      let list = suggestCache.get(q);
+      if (!list) {
+        try { list = await fetchSuggest(q); suggestCache.set(q, list); } catch { return; }
+      }
+      if (my !== seq) return; // typed on since
+      const haveText = new Set(rows.filter(r => r.kind === "search").map(r => r.text.toLowerCase()));
+      const haveUrl = new Set(rows.filter(r => r.url).map(r => norm(r.url)));
+      const extra = [];
+      for (const s of list) {
+        if (rows.length + extra.length >= MAX_ROWS) break;
+        if (s.nav) {
+          const url = toUrl(s.text);
+          if (!haveUrl.has(norm(url))) extra.push({ kind: "url", url, title: s.desc || display(url) });
+        } else if (!haveText.has(s.text.toLowerCase())) {
+          extra.push({ kind: "search", text: s.text, title: s.text, sub: "Google" });
+        }
+      }
+      if (!extra.length) return;
+      rows = [...rows, ...extra];
+      render(q);
+    }, 120);
   }
 
   // ---------- rendering ----------
@@ -597,6 +638,14 @@
 
   input.addEventListener("keydown", e => {
     const k = e.key;
+    // 1–9 in an empty bar opens that favorite, 0 the ArcTab homepage (search-only tab / Ctrl+T overlay).
+    if (k === "0" && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off" && (searchOnly() || OVERLAY)) {
+      e.preventDefault(); resetBar(); showHome(); closeBar(); return;
+    }
+    if (/^[1-9]$/.test(k) && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off") {
+      const tile = document.querySelector(`.fav-strip .fav[data-n="${k}"]`);
+      if (tile?.offsetParent) { e.preventDefault(); tile.click(); return; }
+    }
     if (document.body.classList.contains("navigating")) {
       if (k === "Escape") stopNavigating();
       e.preventDefault();
@@ -675,6 +724,15 @@
   document.addEventListener("keydown", e => {
     if (document.querySelector("dialog[open]") || document.body.classList.contains("peeking")) return;
     if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
+    // Esc with the bar up but the cursor elsewhere (the overlay frame often gets focus
+    // without its input): close it the same way the input's own Esc would.
+    if (e.key === "Escape" && isOpen()) {
+      e.preventDefault();
+      if (searchOnly() && !typed && !keyword) return closeTab();
+      resetBar();
+      if (!searchOnly()) closeBar();
+      return;
+    }
     const printable = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openBar(); }
     else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") { if (!isOpen()) openBar({ clear: true }); else input.focus(); }
@@ -692,8 +750,12 @@
   });
   document.getElementById("cmd-open")?.addEventListener("click", () => openBar());
   // Ctrl+T while the homepage itself is showing: open its own bar (see src/background.js).
-  chrome.runtime.onMessage.addListener(msg => {
-    if (msg?.type === "arctab:open-bar" && !OVERLAY && document.visibilityState === "visible") openBar({ clear: true });
+  chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+    if (msg?.type !== "arctab:open-bar" || OVERLAY || document.visibilityState !== "visible") return;
+    // Already up (or a search-only tab, which is always the bar): ask for a new tab.
+    if (isOpen()) { resetBar(); if (!searchOnly()) closeBar(); reply("was-open"); return; }
+    openBar({ clear: true });
+    reply("opened");
   });
   input.addEventListener("focus", () => { if (typed.trim()) update(false); });
 
@@ -706,4 +768,6 @@
   const later = window.requestIdleCallback || (f => setTimeout(f, 1));
   later(() => { loadBookmarks(); loadHistory(); }, { timeout: 300 });
   if (searchOnly() || OVERLAY) openBar({ clear: true });
+  // The page hands focus to the overlay frame itself; pass it on to the input.
+  if (OVERLAY) addEventListener("focus", () => { if (document.activeElement !== input) input.focus(); });
 })();

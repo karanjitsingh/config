@@ -12,31 +12,42 @@ const OVERLAY_URL = chrome.runtime.getURL("src/overlay/overlay.html");
 function toggleOverlay(src) {
   const id = "__arctab_overlay";
   const old = document.getElementById(id);
-  if (old) { old.remove(); return; }
+  if (old) { old.remove(); return "was-open"; }
   const f = document.createElement("iframe");
   f.id = id;
   f.src = src;
   f.allow = "clipboard-read; clipboard-write";
   f.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;border:0;margin:0;padding:0;z-index:2147483647;background:transparent;color-scheme:normal;");
-  const onMessage = e => {
-    if (e.source !== f.contentWindow || e.data !== "arctab:close") return;
+  const close = () => {
     removeEventListener("message", onMessage);
+    removeEventListener("keydown", onKey, true);
     f.remove();
   };
+  const onMessage = e => { if (e.source === f.contentWindow && e.data === "arctab:close") close(); };
+  // If focus never made it into the frame, Esc lands on the page: close from here too.
+  const onKey = e => { if (e.key === "Escape" && document.getElementById(id) === f) { e.preventDefault(); e.stopPropagation(); close(); } };
   addEventListener("message", onMessage);
+  addEventListener("keydown", onKey, true);
   f.addEventListener("load", () => f.focus());
   document.documentElement.append(f);
 }
 
 chrome.commands.onCommand.addListener(async command => {
   if (command !== "open-search") return;
+  // Settings → "Search over the current page" off: the shortcut is just a new tab.
+  const { ctrlTOverlay } = await chrome.storage.local.get("ctrlTOverlay");
+  if (ctrlTOverlay === false) return chrome.tabs.create({});
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab) return chrome.tabs.create({});
   if (tab.url?.startsWith(HOME_PREFIX) || /^chrome:\/\/newtab/.test(tab.url || "")) {
-    return chrome.runtime.sendMessage({ type: "arctab:open-bar" }).catch(() => {});
+    // Pressed again with the bar already up: open a real new tab, like Arc's ⌘T ⌘T.
+    const reply = await chrome.runtime.sendMessage({ type: "arctab:open-bar" }).catch(() => null);
+    if (reply === "was-open") chrome.tabs.create({});
+    return;
   }
   try {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: toggleOverlay, args: [OVERLAY_URL] });
+    const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: toggleOverlay, args: [OVERLAY_URL] });
+    if (res?.result === "was-open") chrome.tabs.create({});
   } catch {
     chrome.tabs.create({}); // can't draw on this page
   }

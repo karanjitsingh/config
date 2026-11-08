@@ -70,6 +70,29 @@ function splitIcon(title = "") {
 // Returns the emoji if `s` starts with one, else "".
 const firstEmoji = s => (s.trim().match(EMOJI_RE) || [""])[0];
 
+// Favorite tiles for the search-bar views (search-only new tab, Ctrl+T overlay): plain
+// links, no editing. `onOpen(url, event)` handles the click; without it links just navigate.
+async function favoriteStrip(nav, onOpen) {
+  const { fav } = await loadLayout();
+  const links = (await chrome.bookmarks.getChildren(fav.id)).filter(c => c.url);
+  const mk = (tag, cls, props = {}) => Object.assign(document.createElement(tag), { className: cls }, props);
+  nav.replaceChildren(...links.map((b, i) => {
+    const { emoji, name } = splitIcon(b.title);
+    const label = name || hostOf(b.url);
+    let ico;
+    if (emoji) ico = mk("i", "emoji", { textContent: emoji, style: "width:28px;height:28px;font-size:25px" });
+    else {
+      ico = mk("img", "", { src: favicon(b.url, 56), alt: "", width: 28, height: 28 });
+      ico.onerror = () => ico.replaceWith(mk("i", "letter", { textContent: label[0].toUpperCase(), style: "width:28px;height:28px;font-size:17px" }));
+    }
+    const a = mk("a", "fav", { href: b.url, title: b.url });
+    if (i < 9) a.dataset.n = i + 1; // 1–9 opens it (see omnibox.js)
+    a.append(ico, mk("span", "label", { textContent: label }));
+    if (onOpen) a.addEventListener("click", e => { e.preventDefault(); onOpen(b.url, e); });
+    return a;
+  }));
+}
+
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 }

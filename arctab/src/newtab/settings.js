@@ -120,11 +120,15 @@ function showPane(name) {
 for (const t of settingsDlg.querySelectorAll(".set-tab")) t.addEventListener("click", () => showPane(t.dataset.pane));
 
 $("#open-settings").addEventListener("click", () => {
-  showPane(localStorage.settingsPane || "general");
+  showPane(settingsDlg.querySelector(`.set-pane[data-pane="${localStorage.settingsPane}"]`) ? localStorage.settingsPane : "newtab");
   editing = null;
   renderShortcuts();
   $("#set-focus").checked = localStorage.focusPage !== "off";
   $("#set-showhome").checked = localStorage.newTabMode !== "search";
+  $("#set-sofavs").checked = localStorage.searchFavs !== "off";
+  $("#set-ovfavs").checked = localStorage.overlayFavs !== "off";
+  $("#set-favdigits").checked = localStorage.favDigits !== "off";
+  chrome.storage.local.get("ctrlTOverlay").then(({ ctrlTOverlay }) => { $("#set-overlay").checked = ctrlTOverlay !== false; });
   fillPeekKinds();
   settingsDlg.showModal();
   document.activeElement?.blur(); // no focus ring on the first item when opened with the mouse
@@ -132,6 +136,19 @@ $("#open-settings").addEventListener("click", () => {
 
 $("#set-showhome").addEventListener("change", e => {
   localStorage.newTabMode = e.target.checked ? "home" : "search";
+});
+$("#set-sofavs").addEventListener("change", e => {
+  localStorage.searchFavs = e.target.checked ? "on" : "off";
+});
+$("#set-ovfavs").addEventListener("change", e => {
+  localStorage.overlayFavs = e.target.checked ? "on" : "off";
+});
+$("#set-favdigits").addEventListener("change", e => {
+  localStorage.favDigits = e.target.checked ? "on" : "off";
+});
+// Read by background.js, which can't see this page's localStorage.
+$("#set-overlay").addEventListener("change", e => {
+  chrome.storage.local.set({ ctrlTOverlay: e.target.checked });
 });
 $("#set-focus").addEventListener("change", e => {
   localStorage.focusPage = e.target.checked ? "on" : "off";
