@@ -7,6 +7,72 @@
       "complex_modifications": {
         "rules": [
           {
+            "description": "Chrome: Cmd+T opens the ArcTab search overlay (sends Ctrl+T); Cmd+Option+T is a real new tab",
+            "manipulators": [
+              {
+                "conditions": [
+                  {
+                    "bundle_identifiers": [
+                      "^com\\.google\\.Chrome$"
+                    ],
+                    "type": "frontmost_application_if"
+                  }
+                ],
+                "from": {
+                  "key_code": "t",
+                  "modifiers": {
+                    "mandatory": [
+                      "command"
+                    ],
+                    "optional": [
+                      "caps_lock"
+                    ]
+                  }
+                },
+                "to": [
+                  {
+                    "key_code": "t",
+                    "modifiers": [
+                      "left_control"
+                    ]
+                  }
+                ],
+                "type": "basic"
+              },
+              {
+                "conditions": [
+                  {
+                    "bundle_identifiers": [
+                      "^com\\.google\\.Chrome$"
+                    ],
+                    "type": "frontmost_application_if"
+                  }
+                ],
+                "from": {
+                  "key_code": "t",
+                  "modifiers": {
+                    "mandatory": [
+                      "command",
+                      "option"
+                    ],
+                    "optional": [
+                      "caps_lock"
+                    ]
+                  }
+                },
+                "to": [
+                  {
+                    "key_code": "t",
+                    "modifiers": [
+                      "left_command"
+                    ]
+                  }
+                ],
+                "type": "basic"
+              }
+            ]
+          },
+          {
             "description": "Press both left and right shift together to toggle Caps Lock",
             "manipulators": [
               {
