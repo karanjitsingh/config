@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ArcTab",
-  "version": "4.4",
+  "version": "4.5",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnHn8brUWGci2L2GL8zRWcZsNSVYkap4y7xEx6j5WP5Bh/JqPR7tcur0qe0Z+dVHWpn8L+py/VemYsMQ7Ck7Ar8IoCmGKrxMM4789/zRciStZ/d8O5Z2ECHHALE3og/xrhJaauzE5WXOUiGaGczDGQg8TH6m4zkJnL49Kn4h/KRLShHHMXlVU1dV/CoE1UwgJcFRXWPt2ayNJZr4lxSQGgovmKdo5am4b6U9iq7TIXLR9A6rzg+2yXr4HaY3ZZjUbIT3siDW7Q+/Lu+4ujgNszm1dsoTxlj/aooK8TJmqyZPvLKVitDQn0sirPK4TMoCPIXl8H/qQGxJM1uaUgzBvbwIDAQAB",
   "description": "New tab page built from your bookmarks, with pinning.",
   "permissions": [
@@ -39,5 +39,24 @@
   ],
   "background": {
     "service_worker": "src/background.js"
-  }
+  },
+  "commands": {
+    "open-search": {
+      "suggested_key": {
+        "default": "Alt+T",
+        "mac": "MacCtrl+T"
+      },
+      "description": "Search over the current page (like Arc's new tab)"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/overlay/overlay.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }

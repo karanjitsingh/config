@@ -1,0 +1,6 @@
+/* The search bar drawn over whatever page you're on (Ctrl+T). The frame covers the
+   whole window; only the bar and a light dim are visible. */
+html, body { background: transparent !important; }
+body.overlay { margin: 0; overflow: hidden; }
+body.overlay #cmd-backdrop { background: rgba(20, 20, 30, .14); backdrop-filter: blur(4px); }
+@media (prefers-color-scheme: dark) { body.overlay #cmd-backdrop { background: rgba(0, 0, 0, .35); } }

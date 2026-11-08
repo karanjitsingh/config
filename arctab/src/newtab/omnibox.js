@@ -10,6 +10,9 @@
 
 (() => {
   if (REOPENING) return; // focus.js is replacing this tab
+  // In the Ctrl+T overlay (src/overlay/) everything opens in a new tab and closing the
+  // bar removes the overlay instead of revealing a homepage.
+  const OVERLAY = typeof ARCTAB_OVERLAY !== "undefined";
   const input = document.getElementById("search");
   const box = document.getElementById("suggest");
   const backdrop = document.getElementById("cmd-backdrop");
@@ -242,7 +245,9 @@
     const sc = keyword ? { key: keyword, engine: SEARCH[keyword], query: q } : null;
     let tabsByUrl = new Map();
     if (!sc) {
-      const [cur, tabs] = await Promise.all([chrome.tabs.getCurrent(), chrome.tabs.query({})]);
+      // The tab this runs in (the overlay's host page counts too) isn't a "switch to" target.
+      const here = OVERLAY ? chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(t => t[0]) : chrome.tabs.getCurrent();
+      const [cur, tabs] = await Promise.all([here, chrome.tabs.query({})]);
       tabsByUrl = new Map(tabs.filter(t => t.id !== cur?.id && !skip(t.url)).map(t => [norm(t.url), t]));
     }
     if (my !== seq) return; // a newer keystroke superseded this one
@@ -280,8 +285,13 @@
         const page = lq.length >= 3 && list.find(c => c.kind === "chrome" && c.title.toLowerCase().startsWith(lq));
         if (page) next.push(page);
       }
+      // "home" / "arctab": show the homepage (mostly for search-only new tabs).
+      if (q.length >= 2 && ["home", "arctab", "arctab home"].some(w => w.startsWith(lq0(q)))) {
+        const exact = ["home", "arctab"].includes(lq0(q));
+        next.splice(exact ? 0 : next.length, 0, { kind: "home", title: "ArcTab Home", sub: "Show your homepage", svg: HOME_ICON });
+      }
       if (SEARCH[q] && !/\s/.test(typed)) next.push({ kind: "keyhint", key: q, title: `Search ${SEARCH[q].name}`, sub: "press Tab", iconUrl: engineOrigin(q) });
-      next.splice(["url", "chrome"].includes(next[0]?.kind) ? 1 : 0, 0, { kind: "search", text: q, title: q, sub: "Search" });
+      next.splice(["url", "chrome", "home"].includes(next[0]?.kind) ? 1 : 0, 0, { kind: "search", text: q, title: q, sub: "Search" });
       for (const c of list) {
         if (next.length >= MAX_ROWS) break;
         if (next.some(r => r.url && norm(r.url) === norm(c.url))) continue;
@@ -299,6 +309,8 @@
 
   // ---------- rendering ----------
 
+  const lq0 = q => q.trim().toLowerCase();
+  const HOME_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 7.2 8 2.8l5.5 4.4V13a.7.7 0 0 1-.7.7H9.6V10H6.4v3.7H3.2a.7.7 0 0 1-.7-.7z"/></svg>';
   const SEARCH_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 10.4 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
   // Line icons for Chrome pages (Lucide-style, 24×24 strokes rendered at 16px).
@@ -350,7 +362,7 @@
     const isChrome = r.url?.startsWith("chrome://");
     const iconSrc = r.past || isChrome ? null : r.iconUrl || r.url;
     const ico = iconSrc ? el("img", { src: favicon(iconSrc, 32), alt: "", width: 16, height: 16 }) : el("span", { className: "sug-ico" });
-    if (!iconSrc) ico.innerHTML = r.past ? CLOCK_ICON : isChrome ? chromeIcon(r.url) : SEARCH_ICON;
+    if (!iconSrc) ico.innerHTML = r.svg || (r.past ? CLOCK_ICON : isChrome ? chromeIcon(r.url) : SEARCH_ICON);
     const text = el("span", { className: "sug-text" }, el("span", { className: "sug-title" }, highlight(r.title, terms)));
     if (r.url && r.kind !== "url") text.append(el("span", { className: "sug-sub" }, " – ", highlight(display(r.url), terms)));
     else if (r.url && r.title !== display(r.url)) text.append(el("span", { className: "sug-sub" }, " – ", display(r.url)));
@@ -389,6 +401,7 @@
   // ---------- actions ----------
 
   async function openUrl(url, newTab) {
+    if (OVERLAY) { await chrome.tabs.create({ url }); return closeOverlay(); }
     if (newTab) return chrome.tabs.create({ url });
     const cur = await chrome.tabs.getCurrent();
     chrome.tabs.update(cur.id, { url });
@@ -397,6 +410,7 @@
   // The homepage tab stays open: closing it would put it on Chrome's recently-closed
   // list, so ⌘⇧T would reopen the homepage instead of the tab you actually closed.
   async function switchTo(tab) {
+    if (OVERLAY) closeOverlay();
     await chrome.tabs.update(tab.id, { active: true });
     await chrome.windows.update(tab.windowId, { focused: true });
   }
@@ -444,11 +458,13 @@
     if (!r) return;
     // Anything already open in another tab switches to it (like Arc); ⌘Enter opens a copy.
     if (r.tab && !newTab) return switchTo(r.tab);
-    const navigates = !newTab && !["keyhint", "info", "tab"].includes(r.kind);
+    if (r.kind === "home") { resetBar(); closeBar(); return showHome(); }
+    const navigates = !OVERLAY && !newTab && !["keyhint", "info", "tab"].includes(r.kind);
     if (navigates) showNavigating(r);
     switch (r.kind) {
       case "search":
         if (!chrome.search) return openUrl(SEARCH.g.url.replace("%s", encodeURIComponent(r.text)), newTab);
+        if (OVERLAY) { chrome.search.query({ text: r.text, disposition: "NEW_TAB" }); return closeOverlay(); }
         return chrome.search.query({ text: r.text, disposition: newTab ? "NEW_TAB" : "CURRENT_TAB" });
       case "keyword":
         return openUrl(shortcutUrl(r.sc.engine, r.sc.query), newTab);
@@ -575,7 +591,7 @@
       const m = typed.match(/^(\S+)\s(.*)$/s); // "code " → pill
       if (m && SEARCH[m[1]]) return enterKeyword(m[1], m[2]);
     }
-    if (!typed && !keyword) return closeBar(); // deleted everything → back to the homepage
+    if (!typed && !keyword) return searchOnly() || OVERLAY ? update(false) : closeBar(); // deleted everything → back to the homepage
     update(!(e.inputType || "").startsWith("delete"));
   });
 
@@ -604,7 +620,8 @@
     } else if (k === "Escape") {
       e.preventDefault();
       if (hasCompletionSelected()) { input.value = typed; completion = null; }
-      else { input.value = typed = ""; rows = []; keyword = null; hidePill(); closeBar(); }
+      else if (searchOnly() && !typed && !keyword) closeTab(); // Esc on an empty search-only tab closes it, like Arc
+      else { resetBar(); if (!searchOnly()) closeBar(); }
     } else if ((k === "Delete" || k === "Backspace") && e.shiftKey && (rows[sel]?.kind === "history" || rows[sel]?.past)) {
       e.preventDefault();
       removeHistory(rows[sel]);
@@ -619,6 +636,9 @@
   // ---------- command bar open/close ----------
 
   const isOpen = () => document.body.classList.contains("cmd-open");
+  const searchOnly = () => document.body.classList.contains("search-only");
+  function resetBar() { input.value = typed = ""; rows = []; keyword = null; hidePill(); render(""); }
+  const closeTab = () => chrome.tabs.getCurrent(t => t && chrome.tabs.remove(t.id));
 
   function openBar({ clear = false } = {}) {
     if (clear) { input.value = typed = ""; rows = []; keyword = null; hidePill(); render(""); }
@@ -630,6 +650,7 @@
 
   // Closing leaves keyboard focus on the page, so typing reopens the bar right away.
   function closeBar() {
+    if (OVERLAY) return closeOverlay();
     document.body.classList.remove("cmd-open");
     box.classList.add("hidden");
     input.blur();
@@ -639,16 +660,13 @@
   // half-typed search.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "hidden") return;
-    input.value = typed = "";
-    rows = [];
-    keyword = null;
-    hidePill();
-    closeBar();
+    resetBar();
+    if (!searchOnly()) closeBar(); // in the overlay: leaving the tab removes it
   });
 
   // Clicking outside the bar reveals the homepage underneath.
   backdrop.addEventListener("mousedown", e => {
-    if (e.target === backdrop) { e.preventDefault(); closeBar(); }
+    if (e.target === backdrop) { e.preventDefault(); if (!searchOnly()) closeBar(); }
   });
 
   // The page is the homepage until you type. Typing anywhere opens the bar with that
@@ -672,7 +690,11 @@
   input.addEventListener("keydown", e => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); input.select(); }
   });
-  document.getElementById("cmd-open").addEventListener("click", () => openBar());
+  document.getElementById("cmd-open")?.addEventListener("click", () => openBar());
+  // Ctrl+T while the homepage itself is showing: open its own bar (see src/background.js).
+  chrome.runtime.onMessage.addListener(msg => {
+    if (msg?.type === "arctab:open-bar" && !OVERLAY && document.visibilityState === "visible") openBar({ clear: true });
+  });
   input.addEventListener("focus", () => { if (typed.trim()) update(false); });
 
   let bmTimer;
@@ -683,4 +705,5 @@
   // Load suggestion data after the first frame so it never delays the page appearing.
   const later = window.requestIdleCallback || (f => setTimeout(f, 1));
   later(() => { loadBookmarks(); loadHistory(); }, { timeout: 300 });
+  if (searchOnly() || OVERLAY) openBar({ clear: true });
 })();

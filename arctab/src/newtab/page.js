@@ -141,7 +141,7 @@ function paintSnapshot() {
 
 // Our own edits fire these too, so this is the only re-render path.
 let reloadTimer;
-const scheduleLoad = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(() => load().catch(e => showError(String(e?.message || e))), 50); };
+const scheduleLoad = () => { if (!homeShown) return; clearTimeout(reloadTimer); reloadTimer = setTimeout(() => load().catch(e => showError(String(e?.message || e))), 50); };
 if (bm) {
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved", "onChildrenReordered", "onImportEnded"]) {
     bm[ev].addListener(scheduleLoad);
@@ -192,10 +192,19 @@ $("#manage").addEventListener("click", e => {
 
 tick();
 setInterval(tick, 10_000);
-if (REOPENING) { /* focus.js is replacing this tab */ }
-else if (!bm) showError("The extension doesn't have bookmarks permission yet. Open chrome://extensions and click the reload icon on ArcTab.");
-else {
+// Settings → "New tabs open to just the search bar": the tab starts as only the command
+// bar, and the homepage is built when you ask for it (type "home").
+var homeShown = false;
+function showHome() {
+  if (homeShown) return;
+  homeShown = true;
+  document.body.classList.remove("search-only");
   paintSnapshot();
   load().catch(e => showError(String(e?.message || e)));
   setTimeout(markReady, 600); // never stay hidden if something stalls
 }
+
+if (REOPENING) { /* focus.js is replacing this tab */ }
+else if (!bm) showError("The extension doesn't have bookmarks permission yet. Open chrome://extensions and click the reload icon on ArcTab.");
+else if (localStorage.newTabMode === "search") { document.body.classList.add("search-only"); markReady(); }
+else showHome();

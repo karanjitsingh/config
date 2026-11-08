@@ -124,11 +124,15 @@ $("#open-settings").addEventListener("click", () => {
   editing = null;
   renderShortcuts();
   $("#set-focus").checked = localStorage.focusPage !== "off";
+  $("#set-showhome").checked = localStorage.newTabMode !== "search";
   fillPeekKinds();
   settingsDlg.showModal();
   document.activeElement?.blur(); // no focus ring on the first item when opened with the mouse
 });
 
+$("#set-showhome").addEventListener("change", e => {
+  localStorage.newTabMode = e.target.checked ? "home" : "search";
+});
 $("#set-focus").addEventListener("change", e => {
   localStorage.focusPage = e.target.checked ? "on" : "off";
 });

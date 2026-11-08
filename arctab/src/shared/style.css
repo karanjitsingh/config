@@ -78,7 +78,7 @@ body.cmd-open main { filter: blur(10px) saturate(.9); opacity: .55; transform: s
 body:not(.cmd-open) #cmd-backdrop { display: none; }
 #cmd {
   width: min(780px, calc(100vw - 48px));
-  background: color-mix(in srgb, var(--card) 86%, transparent);
+  background: color-mix(in srgb, var(--card) 96%, transparent); /* nearly solid: just a hint of what's behind */
   backdrop-filter: blur(28px) saturate(1.5);
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 16px;
@@ -1117,3 +1117,11 @@ dialog#settings {
 #settings .set-list #sc-list { max-height: none; margin: 0; padding: 0; }
 #settings .sc-foot { margin-top: 12px; }
 #settings .sc-row { padding: 9px 10px; }
+
+/* ---- search-only new tab (Settings → General) ---- */
+body.search-only main { display: none; }
+body.search-only #cmd-backdrop {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
+    var(--bg);
+}
