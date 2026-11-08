@@ -8,9 +8,12 @@
 const SHORTCUTS_KEY = "searchShortcuts";
 const SEARCH_DEFAULTS = structuredClone(SEARCH);
 
+let shortcutsAside = {}; // local shortcuts hidden while local extras are off; saved back untouched
 function applyShortcuts(map) {
+  const [shown, aside] = splitLocalShortcuts(map);
+  shortcutsAside = aside;
   for (const k of Object.keys(SEARCH)) delete SEARCH[k];
-  Object.assign(SEARCH, map || SEARCH_DEFAULTS);
+  Object.assign(SEARCH, shown || SEARCH_DEFAULTS);
 }
 
 chrome.storage.local.get(SHORTCUTS_KEY).then(({ [SHORTCUTS_KEY]: saved }) => applyShortcuts(saved));
@@ -25,10 +28,11 @@ const scList = $("#sc-list");
 let editing = null; // key being edited, "" for a new shortcut
 
 async function saveShortcuts(map) {
-  const isDefault = JSON.stringify(map) === JSON.stringify(SEARCH_DEFAULTS);
+  const isDefault = JSON.stringify(map) === JSON.stringify(SEARCH_DEFAULTS) && !Object.keys(shortcutsAside).length;
+  const stored = { ...map, ...shortcutsAside };
   if (isDefault) await chrome.storage.local.remove(SHORTCUTS_KEY);
-  else await chrome.storage.local.set({ [SHORTCUTS_KEY]: map });
-  applyShortcuts(isDefault ? null : map);
+  else await chrome.storage.local.set({ [SHORTCUTS_KEY]: stored });
+  applyShortcuts(isDefault ? null : stored);
 }
 
 function engineIcon(url) {
@@ -120,13 +124,14 @@ function showPane(name) {
 for (const t of settingsDlg.querySelectorAll(".set-tab")) t.addEventListener("click", () => showPane(t.dataset.pane));
 
 $("#open-settings").addEventListener("click", () => {
-  showPane(settingsDlg.querySelector(`.set-pane[data-pane="${localStorage.settingsPane}"]`) ? localStorage.settingsPane : "newtab");
+  showPane(settingsDlg.querySelector(`.set-tab[data-pane="${localStorage.settingsPane}"]:not([hidden])`) ? localStorage.settingsPane : "general");
   editing = null;
   renderShortcuts();
   $("#set-focus").checked = localStorage.focusPage !== "off";
   $("#set-showhome").checked = localStorage.newTabMode !== "search";
   $("#set-ovfavs").checked = localStorage.overlayFavs !== "off";
   $("#set-favdigits").checked = localStorage.favDigits !== "off";
+  $("#set-local").checked = !LOCAL_EXTRAS_OFF;
   $("#set-ovupdates").checked = localStorage.overlayUpdates !== "off";
   chrome.storage.local.get("ctrlTOverlay").then(({ ctrlTOverlay }) => { $("#set-overlay").checked = ctrlTOverlay !== false; });
   fillPeekKinds();
@@ -140,6 +145,22 @@ $("#set-showhome").addEventListener("change", e => {
 $("#set-ovfavs").addEventListener("change", e => {
   localStorage.overlayFavs = e.target.checked ? "on" : "off";
 });
+// Local extras (everything from local/): only offered when local/ defines LOCAL_EXTRAS,
+// e.g. { label: "Work", description: "…", defaultOn: true }. Off by default. Turning it off or on reloads the page,
+// since widgets and shortcuts are picked up at startup.
+if (typeof LOCAL_EXTRAS !== "undefined") {
+  $("#local-cat").hidden = false;
+  $("#local-pane-name").textContent = LOCAL_EXTRAS.label;
+  $("#local-row-name").textContent = `${LOCAL_EXTRAS.label} features`;
+  if (LOCAL_EXTRAS.description) $("#local-lede").textContent = LOCAL_EXTRAS.description;
+  $("#set-local").addEventListener("change", async e => {
+    const on = e.target.checked;
+    localStorage.localExtras = on ? "on" : "off";
+    await chrome.storage.local.set({ localExtras: on }); // for background.js
+    if (!on) await chrome.storage.local.remove("arctabUpdates"); // drop their quick-search updates now
+    location.reload();
+  });
+}
 $("#set-favdigits").addEventListener("change", e => {
   localStorage.favDigits = e.target.checked ? "on" : "off";
 });

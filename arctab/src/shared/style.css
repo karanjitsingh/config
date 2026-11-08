@@ -1315,3 +1315,10 @@ body.peeking.cmd-open #cmd-backdrop { z-index: 50; }
 /* …and the peek blurs out behind it, like the homepage does. */
 .peek-backdrop { transition: filter .16s ease, opacity .16s ease; }
 body.peeking.cmd-open .peek-backdrop { filter: blur(10px) saturate(.9); opacity: .6; pointer-events: none; }
+/* Right-click on macOS selects the word under the pointer; tiles and rows aren't text
+   you'd copy, so don't let them select (no blue highlight). */
+.fav, .fav-strip, .link, .upd, .upd-list, .card-head, summary, #favorites { -webkit-user-select: none; user-select: none; }
+/* Category headings inside a settings page (General: New tab, Quick search, …). */
+.set-sub { margin: 26px 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+.set-pane > h2 + .set-sub { margin-top: 18px; }
+.set-sub + .set-lede { margin: -2px 2px 10px; }

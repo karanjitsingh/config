@@ -22,7 +22,14 @@
 // refreshes in the background once it's older than refreshMs.
 
 const WIDGETS = new Map();
-const registerWidget = def => WIDGETS.set(def.id, def);
+// Widgets from local/ stay unregistered while local extras are off (their layout spot is
+// kept, so they come back where they were).
+const registerWidget = def => {
+  if (LOCAL_WIDGETS_OFF && /\/local\//.test(document.currentScript?.src || "")) return;
+  WIDGETS.set(def.id, def);
+};
+// Same rule as LOCAL_EXTRAS_OFF in config.merge.js (not loaded everywhere this is).
+const LOCAL_WIDGETS_OFF = (() => { try { const v = localStorage.localExtras; return v ? v !== "on" : !(typeof LOCAL_EXTRAS !== "undefined" && LOCAL_EXTRAS.defaultOn); } catch { return true; } })();
 const widgetKey = id => `widget:${id}`;
 const isWidgetKey = key => typeof key === "string" && key.startsWith("widget:");
 

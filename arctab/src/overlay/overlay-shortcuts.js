@@ -2,5 +2,5 @@
 chrome.storage.local.get("searchShortcuts").then(({ searchShortcuts }) => {
   if (!searchShortcuts) return;
   for (const k of Object.keys(SEARCH)) delete SEARCH[k];
-  Object.assign(SEARCH, searchShortcuts);
+  Object.assign(SEARCH, splitLocalShortcuts(searchShortcuts)[0]);
 });

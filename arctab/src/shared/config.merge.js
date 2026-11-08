@@ -1,5 +1,17 @@
 // Runs after config.js and the optional config.local.js.
-const SEARCH = { ...SEARCH_BASE, ...(typeof SEARCH_LOCAL !== "undefined" ? SEARCH_LOCAL : {}) };
+// Settings → the local extras switch (shown when local/ files define LOCAL_EXTRAS) turns
+// everything from local/ off: its widgets, its shortcuts, its background helpers.
+// Off unless switched on (or local/ says defaultOn for this machine).
+const LOCAL_EXTRAS_OFF = (() => { try { const v = localStorage.localExtras; return v ? v !== "on" : !(typeof LOCAL_EXTRAS !== "undefined" && LOCAL_EXTRAS.defaultOn); } catch { return true; } })();
+const SEARCH_LOCAL_KEYS = new Set(typeof SEARCH_LOCAL !== "undefined" ? Object.keys(SEARCH_LOCAL) : []);
+const SEARCH = { ...SEARCH_BASE, ...(typeof SEARCH_LOCAL !== "undefined" && !LOCAL_EXTRAS_OFF ? SEARCH_LOCAL : {}) };
+// A saved shortcut list, split into [shown, kept aside] while local extras are off.
+function splitLocalShortcuts(map) {
+  if (!map || !LOCAL_EXTRAS_OFF) return [map, {}];
+  const shown = {}, aside = {};
+  for (const [k, v] of Object.entries(map)) (SEARCH_LOCAL_KEYS.has(k) ? aside : shown)[k] = v;
+  return [shown, aside];
+}
 
 // The URL a shortcut opens for a query (see `direct` in config.js).
 function shortcutUrl(engine, query) {
