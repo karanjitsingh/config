@@ -12,13 +12,28 @@ const OVERLAY_URL = chrome.runtime.getURL("src/overlay/overlay.html");
 function toggleOverlay(src) {
   const id = "__arctab_overlay";
   const old = document.getElementById(id);
-  if (old) { old.remove(); return "was-open"; }
+  const root = document.documentElement;
+  if (old) { old.remove(); root.style.overflow = root.dataset.arctabOverflow || ""; delete root.dataset.arctabOverflow; return "was-open"; }
+  // Match the page underneath: a dark site gets the dark bar even in light mode.
+  const rgbOf = el => {
+    const m = el && getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+    return m && (m[3] === undefined || +m[3] > .5) ? m.slice(0, 3).map(Number) : null;
+  };
+  const mid = document.elementsFromPoint(innerWidth / 2, innerHeight / 3).map(rgbOf).find(Boolean);
+  const rgb = mid || rgbOf(document.body) || rgbOf(document.documentElement);
+  const dark = rgb ? (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 < 0.45
+    : matchMedia("(prefers-color-scheme: dark)").matches;
   const f = document.createElement("iframe");
   f.id = id;
-  f.src = src;
+  f.src = `${src}#theme=${dark ? "dark" : "light"}`;
   f.allow = "clipboard-read; clipboard-write";
   f.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;border:0;margin:0;padding:0;z-index:2147483647;background:transparent;color-scheme:normal;");
+  // Keep the page still while the bar is up (wheel/trackpad would scroll it underneath).
+  root.dataset.arctabOverflow = root.style.overflow;
+  root.style.overflow = "hidden";
   const close = () => {
+    root.style.overflow = root.dataset.arctabOverflow || "";
+    delete root.dataset.arctabOverflow;
     removeEventListener("message", onMessage);
     removeEventListener("keydown", onKey, true);
     f.remove();
@@ -32,8 +47,30 @@ function toggleOverlay(src) {
   document.documentElement.append(f);
 }
 
+// ---------- fresh updates for the overlay ----------
+// The overlay shows what widgets last published. Widgets only refresh on a visible
+// homepage, so each Ctrl+T also runs a one-shot refresh in an offscreen document.
+const UPDATES_DOC = "src/offscreen/updates.html";
+let refreshing = null;
+async function refreshUpdates() {
+  if (refreshing || !chrome.offscreen) return;
+  refreshing = (async () => {
+    try {
+      if ((await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] })).length) await chrome.offscreen.closeDocument();
+      await chrome.offscreen.createDocument({ url: UPDATES_DOC, reasons: ["LOCAL_STORAGE"], justification: "Refresh code review and ticket updates for the search overlay" });
+      await new Promise(done => {
+        const t = setTimeout(done, 30_000);
+        const on = msg => { if (msg?.type === "arctab:updates-done") { clearTimeout(t); chrome.runtime.onMessage.removeListener(on); done(); } };
+        chrome.runtime.onMessage.addListener(on);
+      });
+      await chrome.offscreen.closeDocument().catch(() => {});
+    } catch (e) { console.warn("[arctab] updates refresh:", e); }
+  })().finally(() => { refreshing = null; });
+}
+
 chrome.commands.onCommand.addListener(async command => {
   if (command !== "open-search") return;
+  refreshUpdates();
   // Settings → "Search over the current page" off: the shortcut is just a new tab.
   const { ctrlTOverlay } = await chrome.storage.local.get("ctrlTOverlay");
   if (ctrlTOverlay === false) return chrome.tabs.create({});

@@ -14,7 +14,8 @@
     "search",
     "scripting",
     "declarativeNetRequestWithHostAccess",
-    "declarativeNetRequestFeedback"
+    "declarativeNetRequestFeedback",
+    "offscreen"
   ],
   "chrome_url_overrides": {
     "newtab": "src/newtab/index.html"

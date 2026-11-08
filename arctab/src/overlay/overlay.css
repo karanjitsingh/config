@@ -4,3 +4,29 @@ html, body { background: transparent !important; }
 body.overlay { margin: 0; overflow: hidden; }
 body.overlay #cmd-backdrop { background: rgba(20, 20, 30, .14); backdrop-filter: blur(4px); }
 @media (prefers-color-scheme: dark) { body.overlay #cmd-backdrop { background: rgba(0, 0, 0, .35); } }
+
+/* The page underneath is dark: use the dark look whatever the system setting. */
+:root[data-theme="dark"] {
+  /* No color-scheme: dark here. If the frame's scheme differs from the page's, Chrome
+     paints the frame opaque, which blacks out the whole page. */
+  --bg: #17171a;
+  --card: #212125;
+  --text: #ececef;
+  --muted: #8b8b93;
+  --border: #2e2e33;
+  --hover: #2a2a2f;
+  --accent: #8f9bff;
+  --sel: #2d3150;
+}
+:root[data-theme="dark"] body.overlay #cmd-backdrop { background: rgba(0, 0, 0, .35); }
+:root[data-theme="dark"] #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .04); }
+:root[data-theme="dark"] #kw-pill {
+  color: color-mix(in srgb, var(--t) 55%, #fff);
+  background: color-mix(in srgb, var(--t) 22%, var(--card));
+  border-color: color-mix(in srgb, var(--t) 40%, transparent);
+}
+:root[data-theme="dark"] .fav-strip .fav { box-shadow: 0 10px 30px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .3); }
+/* Updates are bare text: give them a dark halo so they read over bright spots too. */
+:root[data-theme="dark"] .upd-title { text-shadow: 0 1px 10px rgba(0, 0, 0, .6); }
+:root[data-theme="dark"] .upd-sub { color: rgba(236, 236, 239, .62); }
+:root[data-theme="dark"] .upd:hover { background: rgba(255, 255, 255, .06); }

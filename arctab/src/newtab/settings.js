@@ -127,6 +127,7 @@ $("#open-settings").addEventListener("click", () => {
   $("#set-showhome").checked = localStorage.newTabMode !== "search";
   $("#set-ovfavs").checked = localStorage.overlayFavs !== "off";
   $("#set-favdigits").checked = localStorage.favDigits !== "off";
+  $("#set-ovupdates").checked = localStorage.overlayUpdates !== "off";
   chrome.storage.local.get("ctrlTOverlay").then(({ ctrlTOverlay }) => { $("#set-overlay").checked = ctrlTOverlay !== false; });
   fillPeekKinds();
   settingsDlg.showModal();
@@ -141,6 +142,9 @@ $("#set-ovfavs").addEventListener("change", e => {
 });
 $("#set-favdigits").addEventListener("change", e => {
   localStorage.favDigits = e.target.checked ? "on" : "off";
+});
+$("#set-ovupdates").addEventListener("change", e => {
+  localStorage.overlayUpdates = e.target.checked ? "on" : "off";
 });
 // Read by background.js, which can't see this page's localStorage.
 $("#set-overlay").addEventListener("change", e => {

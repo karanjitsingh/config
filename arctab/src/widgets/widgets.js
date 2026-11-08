@@ -14,6 +14,8 @@
 //     async fetch() { return data }, // JSON-serialisable; throw widgetAuthError(url) when signed out
 //     render(data) { return [nodes] },
 //     count(data) { return n },      // optional: number shown next to the title
+//     updates(data) { return [{ kind, title, sub, url }] }, // kind: a short type label, e.g. "review" // optional: what's new, shown under
+//                                    // the quick search bar (Ctrl+T) until you've seen it
 //   });
 //
 // Data is cached in localStorage so a new tab paints the last result instantly, then
@@ -73,12 +75,40 @@ function paintWidget(def) {
     nodes.push(...def.render(cached.data));
     const n = def.count?.(cached.data);
     ui.count.textContent = n ?? "";
+    publishUpdates(def, cached);
   } else if (!ui.error) {
     nodes.push(el("div", { className: "empty", textContent: "Loading…" }));
   }
   ui.body.classList.toggle("loading", ui.status === "loading");
   ui.body.replaceChildren(...nodes);
   updateFade(ui.body);
+}
+
+// ---------- updates for the quick search bar ----------
+// Widgets that know what's new publish it to chrome.storage (the Ctrl+T overlay can't
+// rely on this page's localStorage). Repainting republishes, so seen items drop off.
+// Opening an item from the overlay is recorded in UPDATES_OPENED for widgets to mark seen.
+const UPDATES_KEY = "arctabUpdates";
+const UPDATES_OPENED = "arctabOpened";
+const publishedUpdates = new Map(); // id -> JSON last written, to skip no-op writes
+async function publishUpdates(def, { data, at }) {
+  if (!def.updates) return;
+  let items;
+  try { items = def.updates(data) || []; } catch { return; }
+  const json = JSON.stringify([items, at]);
+  if (publishedUpdates.get(def.id) === json) return;
+  publishedUpdates.set(def.id, json);
+  await navigator.locks.request(UPDATES_KEY, async () => {
+    const { [UPDATES_KEY]: all = {} } = await chrome.storage.local.get(UPDATES_KEY);
+    if (items.length) all[def.id] = { title: def.title, items, at }; // at: when the data was fetched
+    else delete all[def.id];
+    await chrome.storage.local.set({ [UPDATES_KEY]: all });
+  });
+}
+// The widget's half of UPDATES_OPENED: { url: ms } for items opened from the overlay.
+async function openedFromOverlay() {
+  const { [UPDATES_OPENED]: opened = {} } = await chrome.storage.local.get(UPDATES_OPENED);
+  return opened;
 }
 
 // When a sized widget has more than fits, fade the edge(s) that have more content past them.

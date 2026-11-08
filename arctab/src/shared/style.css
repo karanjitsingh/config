@@ -1170,9 +1170,9 @@ body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
 }
 .fav-strip .fav .label { flex: none; width: 100%; white-space: nowrap; }
 /* Favorites step aside once you start typing (or pick a shortcut pill). */
-#cmd-backdrop:has(#search:not(:placeholder-shown), #kw-pill:not(.hidden)) .fav-strip { display: none; }
+#cmd-backdrop:has(#search:not(:placeholder-shown), #kw-pill:not(.hidden)) :is(.fav-strip, .upd-list) { display: none; }
 .fav-strip .fav > .letter { background: var(--sel); }
-body.overlay .fav-strip:not(:empty) { margin-top: 28px; }
+body.overlay .fav-strip:not(:empty) { margin-top: 40px; }
 
 /* ======================================================================
    Homepage polish: a soft accent wash behind everything, a lighter clock,
@@ -1256,3 +1256,57 @@ body:not(.overlay) {
   #cmd-open, #favorites .fav, .card { box-shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 8px 24px rgba(0, 0, 0, .18); }
   #favorites .fav:hover { box-shadow: 0 2px 4px rgba(0, 0, 0, .3), 0 14px 32px rgba(0, 0, 0, .3); }
 }
+
+/* Updates under the quick search favorites: a quiet list, only there when something's new. */
+.upd-list { display: none; }
+body.overlay .upd-list:not(:empty) {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(600px, calc(100vw - 48px));
+  margin-top: 56px;
+  padding: 0 4px;
+  /* No panel: just lines of text on the dimmed page. */
+  animation: cmd-in .2s cubic-bezier(.2, .9, .3, 1.2) backwards;
+}
+.upd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.upd:hover { background: color-mix(in srgb, var(--card) 55%, transparent); }
+/* What kind of update: a small fixed-width tag so titles line up. */
+.upd-kind {
+  flex: none;
+  width: 50px;
+  padding: 2px 0;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .4px;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.upd-kind.is-ticket { color: #d9822b; background: color-mix(in srgb, #d9822b 15%, transparent); }
+/* Only the title is ever cut short; the note stays whole. */
+.upd-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); text-shadow: 0 1px 8px color-mix(in srgb, var(--bg) 70%, transparent); }
+.upd-sub { flex: none; color: color-mix(in srgb, var(--text) 58%, transparent); font-size: 12px; }
+.upd-more {
+  align-self: center;
+  margin: 2px 0 3px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.upd-more:hover { color: var(--accent); }

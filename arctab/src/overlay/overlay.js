@@ -4,6 +4,8 @@
 // just removes the frame, so no tab is created unless you actually go somewhere.
 
 const ARCTAB_OVERLAY = true;
+// The page underneath decides light or dark (src/background.js looks at its background).
+document.documentElement.dataset.theme = /theme=dark/.test(location.hash) ? "dark" : "light";
 const REOPENING = false; // the new tab page's focus hand-off doesn't apply here
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...children) => {
@@ -15,6 +17,10 @@ const el = (tag, attrs = {}, ...children) => {
   n.append(...children);
   return n;
 };
+
+// Wheel/trackpad over the frame would chain-scroll the page (or its inner scroller,
+// like Gmail's list) underneath. Only the suggestion list may scroll.
+addEventListener("wheel", e => { if (!e.target.closest?.("#suggest")) e.preventDefault(); }, { passive: false });
 
 // Tell the page script to remove this frame.
 function closeOverlay() { parent.postMessage("arctab:close", "*"); }
@@ -28,6 +34,44 @@ if (localStorage.overlayFavs !== "off") addEventListener("DOMContentLoaded", () 
     chrome.tabs.create({ url, active: !bg });
     if (!bg) closeOverlay();
   }).catch(e => console.warn("[arctab] favorites:", e));
+});
+
+// Settings → "Show updates in the Ctrl+T search": what's new from widgets that publish
+// updates (code reviews, ticket follow-ups), as of the last time a homepage refreshed them.
+if (localStorage.overlayUpdates !== "off") addEventListener("DOMContentLoaded", () => {
+  const box = document.getElementById("ov-updates");
+  const MAX = 4, FRESH_MS = 24 * 3600e3;
+  async function paint() {
+    const { arctabUpdates: all = {} } = await chrome.storage.local.get("arctabUpdates");
+    const items = Object.values(all).filter(w => Date.now() - (w.at || 0) < FRESH_MS).flatMap(w => w.items);
+    box.replaceChildren(...items.slice(0, MAX).map(it => {
+      // Older published items have no kind; their sub started with it.
+      const kind = it.kind || (/^Code review/.test(it.sub) ? "review" : "ticket");
+      const a = el("a", { className: "upd", href: it.url, title: `${it.title}\n${it.url}` },
+        el("span", { className: `upd-kind is-${kind}`, textContent: kind === "review" ? "Review" : kind === "ticket" ? "Ticket" : kind }),
+        el("span", { className: "upd-title", textContent: it.title }),
+        el("span", { className: "upd-sub", textContent: it.kind ? it.sub || "" : "" }));
+      a.addEventListener("click", e => { e.preventDefault(); openUpdate(it.url, e.metaKey || e.ctrlKey); });
+      return a;
+    }));
+    if (items.length > MAX) {
+      const more = el("button", { type: "button", className: "upd-more", textContent: `${items.length - MAX} more on ArcTab Home` });
+      more.addEventListener("click", showHome);
+      box.append(more);
+    }
+  }
+  async function openUpdate(url, background) {
+    // Tell the widget it's been seen (it clears the item and repaints the homepage).
+    const { arctabOpened: opened = {} } = await chrome.storage.local.get("arctabOpened");
+    const week = Date.now() - 7 * 86400e3;
+    for (const [u, ms] of Object.entries(opened)) if (ms < week) delete opened[u];
+    opened[url] = Date.now();
+    await chrome.storage.local.set({ arctabOpened: opened });
+    chrome.tabs.create({ url, active: !background });
+    if (!background) closeOverlay();
+  }
+  chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && "arctabUpdates" in c) paint(); });
+  paint().catch(e => console.warn("[arctab] updates:", e));
 });
 
 // "ArcTab Home" from the overlay opens the homepage in a new tab.
