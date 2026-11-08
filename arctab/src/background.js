@@ -14,18 +14,9 @@ function toggleOverlay(src) {
   const old = document.getElementById(id);
   const root = document.documentElement;
   if (old) { old.remove(); root.style.overflow = root.dataset.arctabOverflow || ""; delete root.dataset.arctabOverflow; return "was-open"; }
-  // Match the page underneath: a dark site gets the dark bar even in light mode.
-  const rgbOf = el => {
-    const m = el && getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
-    return m && (m[3] === undefined || +m[3] > .5) ? m.slice(0, 3).map(Number) : null;
-  };
-  const mid = document.elementsFromPoint(innerWidth / 2, innerHeight / 3).map(rgbOf).find(Boolean);
-  const rgb = mid || rgbOf(document.body) || rgbOf(document.documentElement);
-  const dark = rgb ? (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 < 0.45
-    : matchMedia("(prefers-color-scheme: dark)").matches;
   const f = document.createElement("iframe");
   f.id = id;
-  f.src = `${src}#theme=${dark ? "dark" : "light"}`;
+  f.src = src;
   f.allow = "clipboard-read; clipboard-write";
   f.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;border:0;margin:0;padding:0;z-index:2147483647;background:transparent;color-scheme:normal;");
   // Keep the page still while the bar is up (wheel/trackpad would scroll it underneath).

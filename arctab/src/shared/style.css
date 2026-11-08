@@ -1310,3 +1310,8 @@ body.overlay .upd-list:not(:empty) {
   cursor: pointer;
 }
 .upd-more:hover { color: var(--accent); }
+/* Ctrl+T (or ⌘K) with a peek open: the search bar comes up over the peek. */
+body.peeking.cmd-open #cmd-backdrop { z-index: 50; }
+/* …and the peek blurs out behind it, like the homepage does. */
+.peek-backdrop { transition: filter .16s ease, opacity .16s ease; }
+body.peeking.cmd-open .peek-backdrop { filter: blur(10px) saturate(.9); opacity: .6; pointer-events: none; }

@@ -1,32 +1,61 @@
 /* The search bar drawn over whatever page you're on (Ctrl+T). The frame covers the
-   whole window; only the bar and a light dim are visible. */
+   whole window: a blurred wash over the page, then the bar, favorites and updates.
+
+   Always light (data-theme="light", set by overlay.js), even in system dark mode. */
 html, body { background: transparent !important; }
 body.overlay { margin: 0; overflow: hidden; }
-body.overlay #cmd-backdrop { background: rgba(20, 20, 30, .14); backdrop-filter: blur(4px); }
-@media (prefers-color-scheme: dark) { body.overlay #cmd-backdrop { background: rgba(0, 0, 0, .35); } }
+body.overlay #cmd-backdrop { backdrop-filter: blur(4px); }
 
-/* The page underneath is dark: use the dark look whatever the system setting. */
-:root[data-theme="dark"] {
-  /* No color-scheme: dark here. If the frame's scheme differs from the page's, Chrome
-     paints the frame opaque, which blacks out the whole page. */
-  --bg: #17171a;
-  --card: #212125;
-  --text: #ececef;
-  --muted: #8b8b93;
-  --border: #2e2e33;
-  --hover: #2a2a2f;
-  --accent: #8f9bff;
-  --sel: #2d3150;
+/* No color-scheme here. If the frame's scheme differs from the page's, Chrome paints the
+   frame opaque, which blacks out the whole page. */
+:root[data-theme="light"] {
+  --bg: #f6f5f2; --card: #ffffff; --text: #1d1d1f; --muted: #8a8a8e;
+  --border: #e6e4df; --hover: #f0eee9; --accent: #5b6cff; --sel: #e8ebff;
 }
-:root[data-theme="dark"] body.overlay #cmd-backdrop { background: rgba(0, 0, 0, .35); }
-:root[data-theme="dark"] #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .04); }
-:root[data-theme="dark"] #kw-pill {
-  color: color-mix(in srgb, var(--t) 55%, #fff);
-  background: color-mix(in srgb, var(--t) 22%, var(--card));
-  border-color: color-mix(in srgb, var(--t) 40%, transparent);
+
+/* ---- light ---- */
+:root[data-theme="light"] body.overlay #cmd-backdrop { background: rgba(20, 20, 30, .14); }
+:root[data-theme="light"] #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08); }
+:root[data-theme="light"] #kw-pill {
+  color: color-mix(in srgb, var(--t) 72%, #000);
+  background: color-mix(in srgb, var(--t) 13%, var(--card));
+  border-color: color-mix(in srgb, var(--t) 26%, transparent);
 }
-:root[data-theme="dark"] .fav-strip .fav { box-shadow: 0 10px 30px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .3); }
-/* Updates are bare text: give them a dark halo so they read over bright spots too. */
-:root[data-theme="dark"] .upd-title { text-shadow: 0 1px 10px rgba(0, 0, 0, .6); }
-:root[data-theme="dark"] .upd-sub { color: rgba(236, 236, 239, .62); }
-:root[data-theme="dark"] .upd:hover { background: rgba(255, 255, 255, .06); }
+:root[data-theme="light"] .fav-strip .fav { box-shadow: 0 10px 30px rgba(0, 0, 0, .1), 0 1px 3px rgba(0, 0, 0, .06); }
+
+/* ---- white text on the page: tiles and update lines ----
+   Tiles are a faint smoky glass so white labels read on light pages too; update lines
+   carry a soft dark shadow for the same reason. */
+:root[data-theme="light"] .fav-strip .fav {
+  /* No tile: the icon on its rounded square, a white label under it (like Launchpad). */
+  color: #fff;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .6), 0 0 8px rgba(0, 0, 0, .35);
+}
+:root[data-theme="light"] .fav-strip .fav:hover,
+:root[data-theme="light"] .fav-strip .fav:focus-visible { background: rgba(255, 255, 255, .14); border-color: transparent; box-shadow: none; }
+:root[data-theme="light"] .fav-strip .fav > img,
+:root[data-theme="light"] .fav-strip .fav > .emoji,
+:root[data-theme="light"] .fav-strip .fav > .letter {
+  width: 32px; height: 32px;
+  padding: 9px;
+  background: rgba(255, 255, 255, .92);
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .18), 0 1px 3px rgba(0, 0, 0, .12);
+}
+:root[data-theme="light"] .fav-strip .fav > .letter { background: #e8ebff; }
+:root[data-theme="light"] .upd-title {
+  color: #fff;
+  /* Tight shadow, plus room for it: overflow: hidden (for the ellipsis) clips anything
+     outside the box, which is what cut the old soft glow off. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .55), 0 0 5px rgba(0, 0, 0, .25);
+  padding: 5px 6px;
+  margin: -5px -6px;
+}
+:root[data-theme="light"] .upd-sub { color: rgba(255, 255, 255, .88); text-shadow: 0 1px 2px rgba(0, 0, 0, .55), 0 0 5px rgba(0, 0, 0, .25); }
+:root[data-theme="light"] .upd:hover { background: rgba(255, 255, 255, .48); }
+:root[data-theme="light"] .upd-kind { color: #fff; background: rgba(91, 108, 255, .85); }
+:root[data-theme="light"] .upd-kind.is-ticket { color: #fff; background: rgba(217, 130, 43, .88); }

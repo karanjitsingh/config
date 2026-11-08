@@ -738,7 +738,7 @@
   // keystroke (focusing during keydown makes the browser deliver it to the input); if the
   // bar is open but lost focus, typing just refocuses it. ⌘K, "/", and ⌘V also open it.
   document.addEventListener("keydown", e => {
-    if (document.querySelector("dialog[open]") || document.body.classList.contains("peeking")) return;
+    if (document.querySelector("dialog[open]") || (document.body.classList.contains("peeking") && !isOpen())) return;
     if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
     // Esc with the bar up but the cursor elsewhere (the overlay frame often gets focus
     // without its input): close it the same way the input's own Esc would.

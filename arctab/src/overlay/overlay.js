@@ -4,8 +4,8 @@
 // just removes the frame, so no tab is created unless you actually go somewhere.
 
 const ARCTAB_OVERLAY = true;
-// The page underneath decides light or dark (src/background.js looks at its background).
-document.documentElement.dataset.theme = /theme=dark/.test(location.hash) ? "dark" : "light";
+// Always the light look, whatever the system setting (tuned to read on any page).
+document.documentElement.dataset.theme = "light";
 const REOPENING = false; // the new tab page's focus hand-off doesn't apply here
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...children) => {

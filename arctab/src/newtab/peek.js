@@ -64,32 +64,44 @@ const peek = {
     this.icon = el("img", { className: "peek-ico", alt: "", width: 16, height: 16 });
     this.title = el("span", { className: "peek-title" });
     this.host = el("span", { className: "peek-host" });
-    this.frame = el("iframe", { className: "peek-frame", referrerPolicy: "no-referrer-when-downgrade" });
-    // No sandbox: a sandboxed frame loses service workers and some storage, which apps
-    // like Gmail need. Chrome itself stops a cross-site frame from navigating the
-    // homepage away unless you clicked inside it.
-    this.frame.setAttribute("allow", "clipboard-read; clipboard-write; fullscreen; camera; microphone; display-capture; storage-access");
     this.hint = el("div", { className: "peek-hint hidden" },
       el("span", { textContent: "Not loading? Some sites don't allow being shown here." }),
       el("button", { type: "button", className: "peek-btn wide", onclick: () => this.toTab() },
         el("span", { textContent: "Expand" }), el("kbd", { className: "peek-kbd", textContent: "⌘O" })));
     const panel = el("div", { className: "peek-panel" },
       el("div", { className: "peek-bar" }, this.icon, this.title, this.host, el("span", { className: "peek-gap" }), toTab, close),
-      el("div", { className: "peek-body" }, this.frame, this.hint));
+      this.body = el("div", { className: "peek-body" }, this.hint));
     this.root = el("div", { className: "peek-backdrop hidden" }, panel);
     this.root.addEventListener("mousedown", e => { if (e.target === this.root) this.close(); });
     close.addEventListener("click", () => this.close());
     toTab.addEventListener("click", () => this.toTab());
-    this.frame.addEventListener("load", () => {
-      this.root.classList.remove("loading");
-      clearTimeout(this.hintTimer);
-    });
     document.addEventListener("keydown", e => {
-      if (!this.isOpen()) return;
+      // The bar on top handles its own keys (its Esc has already closed it by the time
+      // this runs, so look at defaultPrevented too).
+      if (!this.isOpen() || e.defaultPrevented || document.body.classList.contains("cmd-open")) return;
       if (e.key === "Escape") { e.preventDefault(); this.close(); }
       if ((e.metaKey || e.ctrlKey) && (e.key === "o" || e.key === "O" || e.key === "Enter")) { e.preventDefault(); this.toTab(); }
     });
     document.body.append(this.root);
+  },
+  // Closed peeks stay loaded (hidden) for a minute, so reopening the same link is
+  // instant and keeps your place. A frame is never moved in the DOM: that would reload it.
+  cache: new Map(), // url -> { frame, timer }
+  CACHE_MS: 60_000,
+  makeFrame(url) {
+    const frame = el("iframe", { className: "peek-frame", referrerPolicy: "no-referrer-when-downgrade" });
+    // No sandbox: a sandboxed frame loses service workers and some storage, which apps
+    // like Gmail need. Chrome itself stops a cross-site frame from navigating the
+    // homepage away unless you clicked inside it.
+    frame.setAttribute("allow", "clipboard-read; clipboard-write; fullscreen; camera; microphone; display-capture; storage-access");
+    frame.addEventListener("load", () => {
+      if (frame !== this.frame) return;
+      this.root.classList.remove("loading");
+      clearTimeout(this.hintTimer);
+    });
+    frame.src = url;
+    this.body.prepend(frame);
+    return frame;
   },
   isOpen() { return this.root && !this.root.classList.contains("hidden"); },
   // Grow out of the clicked link and shrink back into it (falls back to a plain zoom).
@@ -115,14 +127,27 @@ const peek = {
     this.host.textContent = label ? hostOf(url) : "";
     this.icon.src = favicon(url, 32);
     this.hint.classList.add("hidden");
-    this.root.classList.add("loading");
-    this.frame.src = url;
+    const cached = this.cache.get(url);
+    clearTimeout(this.hintTimer);
+    if (cached) {
+      clearTimeout(cached.timer);
+      this.cache.delete(url);
+      this.frame = cached.frame;
+      this.root.classList.remove("loading");
+    } else {
+      this.root.classList.add("loading");
+      this.frame = this.makeFrame(url);
+      this.hintTimer = setTimeout(() => this.hint.classList.remove("hidden"), 5000);
+    }
+    for (const f of this.body.querySelectorAll(".peek-frame")) f.classList.toggle("hidden", f !== this.frame);
     this.root.classList.remove("hidden");
     document.body.classList.add("peeking");
     this.root.querySelector(".peek-btn.wide").focus(); // keys go to the homepage (Esc, ⌘O) until you click into the page
-    this.zoom(false);
-    clearTimeout(this.hintTimer);
-    this.hintTimer = setTimeout(() => this.hint.classList.remove("hidden"), 5000);
+    // Drop the finished open animation (it would pin opacity and block the blur-out
+    // when the search bar opens over the peek).
+    this.zoom(false).then(() => {
+      if (!this.closing) for (const an of this.root.getAnimations({ subtree: true })) if (an.playState === "finished") an.cancel();
+    });
   },
   async close() {
     if (!this.isOpen() || this.closing) return;
@@ -132,7 +157,12 @@ const peek = {
     this.root.classList.add("hidden");
     for (const a of [...this.root.getAnimations({ subtree: true })]) a.cancel();
     document.body.classList.remove("peeking");
-    this.frame.src = "about:blank";
+    // Keep it for a minute in case you come back; then let it go.
+    const frame = this.frame, url = this.url;
+    frame.classList.add("hidden");
+    this.cache.get(url)?.frame.remove();
+    this.cache.set(url, { frame, timer: setTimeout(() => { frame.remove(); this.cache.delete(url); }, this.CACHE_MS) });
+    this.frame = null;
     this.closing = false;
   },
   toTab() {
