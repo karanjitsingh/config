@@ -1127,14 +1127,45 @@ body.search-only #cmd-backdrop {
 }
 .fav-strip { display: none; }
 body.search-only #cmd-backdrop, body.overlay #cmd-backdrop { flex-direction: column; justify-content: flex-start; align-items: center; }
+/* Favorites under the search bar: separate frosted tiles that match the bar
+   (icon on a soft square, label underneath). */
 body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  width: min(780px, calc(100vw - 48px));
-  margin-top: 28px;
-  animation: cmd-in .2s ease-out;
+  max-width: min(780px, calc(100vw - 48px));
+  margin-top: 16px;
+  animation: cmd-in .2s cubic-bezier(.2, .9, .3, 1.2);
 }
+.fav-strip .fav {
+  width: 84px;
+  gap: 7px;
+  padding: 12px 4px 9px;
+  background: color-mix(in srgb, var(--card) 62%, transparent); /* see-through: the page tints them */
+  backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid color-mix(in srgb, var(--card) 55%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .12), 0 1px 3px rgba(0, 0, 0, .06);
+  color: var(--muted);
+  font-size: 11.5px;
+  transition: transform .15s cubic-bezier(.2, .9, .3, 1.4), box-shadow .15s, color .12s, border-color .12s;
+}
+.fav-strip .fav:hover, .fav-strip .fav:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .16), 0 2px 6px rgba(0, 0, 0, .08);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
+  outline: none;
+}
+.fav-strip .fav > img, .fav-strip .fav > .emoji, .fav-strip .fav > .letter {
+  box-sizing: content-box;
+  padding: 7px;
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
+}
+.fav-strip .fav .label { flex: none; width: 100%; white-space: nowrap; }
 /* Favorites step aside once you start typing (or pick a shortcut pill). */
 #cmd-backdrop:has(#search:not(:placeholder-shown), #kw-pill:not(.hidden)) .fav-strip { display: none; }
+.fav-strip .fav > .letter { background: var(--sel); }

@@ -125,7 +125,6 @@ $("#open-settings").addEventListener("click", () => {
   renderShortcuts();
   $("#set-focus").checked = localStorage.focusPage !== "off";
   $("#set-showhome").checked = localStorage.newTabMode !== "search";
-  $("#set-sofavs").checked = localStorage.searchFavs !== "off";
   $("#set-ovfavs").checked = localStorage.overlayFavs !== "off";
   $("#set-favdigits").checked = localStorage.favDigits !== "off";
   chrome.storage.local.get("ctrlTOverlay").then(({ ctrlTOverlay }) => { $("#set-overlay").checked = ctrlTOverlay !== false; });
@@ -136,9 +135,6 @@ $("#open-settings").addEventListener("click", () => {
 
 $("#set-showhome").addEventListener("change", e => {
   localStorage.newTabMode = e.target.checked ? "home" : "search";
-});
-$("#set-sofavs").addEventListener("change", e => {
-  localStorage.searchFavs = e.target.checked ? "on" : "off";
 });
 $("#set-ovfavs").addEventListener("change", e => {
   localStorage.overlayFavs = e.target.checked ? "on" : "off";

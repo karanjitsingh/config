@@ -130,6 +130,9 @@
     return (Math.log2(1 + h.visitCount) + 2 * Math.log2(1 + (h.typedCount || 0))) * (0.3 + 1 / (1 + days / 7));
   }
 
+  // Same destination, unless they're two different open tabs of it.
+  const sameRow = (a, b) => a.url && b.url && norm(a.url) === norm(b.url) && !(a.tab && b.tab && a.tab.id !== b.tab.id);
+
   function candidates(q, tabsByUrl) {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const out = new Map();
@@ -148,11 +151,14 @@
       const m = Math.max(matchScore(terms, p.title, p.url), matchScore(terms, `${p.title} ${p.words}`, "") * 0.8);
       if (m && !out.has(norm(p.url))) out.set(norm(p.url), { kind: "chrome", url: p.url, title: p.title, m, h: histByUrl.get(norm(p.url)) });
     }
-    for (const [k, tab] of tabsByUrl) {
-      const ex = out.get(k);
-      if (ex) { ex.tab = tab; continue; }
-      const m = matchScore(terms, tab.title || "", tab.url);
-      if (m) out.set(k, { kind: "tab", url: tab.url, title: tab.title || display(tab.url), m, tab });
+    for (const [k, tabs] of tabsByUrl) {
+      // The first copy rides on the history/bookmark row; any others get a row each.
+      tabs.forEach((tab, i) => {
+        const ex = i === 0 && out.get(k);
+        if (ex) { ex.tab = tab; return; }
+        const m = matchScore(terms, tab.title || "", tab.url);
+        if (m) out.set(i ? `${k}#${tab.id}` : k, { kind: "tab", url: tab.url, title: tab.title || display(tab.url), m, tab, h: histByUrl.get(k) });
+      });
     }
     const list = [...out.values()];
     for (const c of list) {
@@ -248,7 +254,12 @@
       // The tab this runs in (the overlay's host page counts too) isn't a "switch to" target.
       const here = OVERLAY ? chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(t => t[0]) : chrome.tabs.getCurrent();
       const [cur, tabs] = await Promise.all([here, chrome.tabs.query({})]);
-      tabsByUrl = new Map(tabs.filter(t => t.id !== cur?.id && !skip(t.url)).map(t => [norm(t.url), t]));
+      // Every open copy of a page counts: the same URL can be open in several tabs.
+      for (const t of tabs) {
+        if (t.id === cur?.id || skip(t.url)) continue;
+        const k = norm(t.url);
+        tabsByUrl.set(k, [...(tabsByUrl.get(k) || []), t]);
+      }
     }
     if (my !== seq) return; // a newer keystroke superseded this one
 
@@ -294,7 +305,7 @@
       next.splice(["url", "chrome", "home"].includes(next[0]?.kind) ? 1 : 0, 0, { kind: "search", text: q, title: q, sub: "Search" });
       for (const c of list) {
         if (next.length >= MAX_ROWS) break;
-        if (next.some(r => r.url && norm(r.url) === norm(c.url))) continue;
+        if (next.some(r => sameRow(r, c))) continue;
         next.push(c);
       }
     }
@@ -398,6 +409,9 @@
     return frag;
   }
 
+  let myWindowId;
+  chrome.windows?.getCurrent().then(w => { myWindowId = w.id; });
+
   function rowNode(r, i, terms) {
     const n = el("div", { className: "sug" + (i === sel ? " sel" : ""), role: "option" });
     const isChrome = r.url?.startsWith("chrome://");
@@ -411,7 +425,9 @@
     n.append(ico, text);
     if (r.kind === "bookmark") n.append(el("span", { className: "sug-mark", textContent: "★", title: "Bookmarked" }));
     if (r.tab) {
-      const b = el("button", { type: "button", className: "sug-tab", textContent: "Switch to tab" });
+      // Copies of the same page are told apart by where they are.
+      const where = r.tab.windowId !== myWindowId ? " · other window" : "";
+      const b = el("button", { type: "button", className: "sug-tab", textContent: `Switch to tab${where}` });
       b.addEventListener("mousedown", e => e.preventDefault());
       b.addEventListener("click", e => { e.stopPropagation(); switchTo(r.tab); });
       n.append(b);

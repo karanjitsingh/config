@@ -205,10 +205,9 @@ function showHome() {
   setTimeout(markReady, 600); // never stay hidden if something stalls
 }
 
-// Settings → "Show favorites with the search bar": plain tiles under the bar on a
+// Favorites as plain tiles under the bar on a
 // search-only tab. Clicking one goes there in this tab; ⌘-click opens a new tab.
 function searchFavs() {
-  if (localStorage.searchFavs === "off") return;
   favoriteStrip($("#so-favs")).then(() => { if (homeShown) $("#so-favs").replaceChildren(); });
 }
 
