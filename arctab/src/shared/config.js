@@ -1,5 +1,7 @@
 // Search shortcuts: typing "<key> <query>" in the search box opens the search.
 // Add private/work shortcuts in config.local.js (git-ignored) as `const SEARCH_LOCAL = { ... }`.
+// Optional `base64: '<JSON with %s>'`: the query is put into that JSON, which is base64-encoded
+// into the URL's %s (for searches stored in an encoded parameter).
 // Optional `direct: { match, url }`: when the whole query matches the regex (case-insensitive),
 // open `direct.url` instead, e.g. a ticket ID straight to the ticket rather than a search.
 const SEARCH_BASE = {

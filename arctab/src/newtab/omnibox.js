@@ -211,7 +211,7 @@
     for (const h of history) {
       const m = h.url.match(re);
       if (m) {
-        const query = decode(m[1]).trim();
+        const query = shortcutQueryFrom(SEARCH[key], decode(m[1])).trim();
         if (!query) continue;
         const ql = query.toLowerCase();
         let s = !lq ? 50 : ql.startsWith(lq) ? 100 : new RegExp(`(^|\\W)${escRe(lq)}`).test(ql) ? 70 : ql.includes(lq) ? 40 : 0;
