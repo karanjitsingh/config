@@ -47,10 +47,14 @@ if (localStorage.overlayUpdates !== "off") addEventListener("DOMContentLoaded", 
     box.replaceChildren(...items.slice(0, MAX).map(it => {
       // Older published items have no kind; their sub started with it.
       const kind = it.kind || (/^Code review/.test(it.sub) ? "review" : "ticket");
-      const a = el("a", { className: "upd", href: it.url, title: `${it.title}\n${it.url}` },
+      const a = el("a", { className: "upd", href: it.url },
         el("span", { className: `upd-kind is-${kind}`, textContent: kind === "review" ? "Review" : kind === "ticket" ? "Ticket" : kind }),
         el("span", { className: "upd-title", textContent: it.title }),
         el("span", { className: "upd-sub", textContent: it.kind ? it.sub || "" : "" }));
+      // ✓ on the right (on hover): mark it read without opening it.
+      const read = el("button", { type: "button", className: "upd-read", title: "Mark as read", ariaLabel: "Mark as read", textContent: "✓" });
+      read.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); markRead(it.url, a); });
+      a.append(read);
       a.addEventListener("click", e => { e.preventDefault(); openUpdate(it.url, e.metaKey || e.ctrlKey); });
       return a;
     }));
@@ -60,13 +64,29 @@ if (localStorage.overlayUpdates !== "off") addEventListener("DOMContentLoaded", 
       box.append(more);
     }
   }
-  async function openUpdate(url, background) {
-    // Tell the widget it's been seen (it clears the item and repaints the homepage).
+  // Tell the widgets it's been seen; they mark it and republish without it.
+  async function recordSeen(url) {
     const { arctabOpened: opened = {} } = await chrome.storage.local.get("arctabOpened");
     const week = Date.now() - 7 * 86400e3;
     for (const [u, ms] of Object.entries(opened)) if (ms < week) delete opened[u];
     opened[url] = Date.now();
     await chrome.storage.local.set({ arctabOpened: opened });
+  }
+  async function markRead(url, row) {
+    row.classList.add("leaving");
+    await recordSeen(url);
+    // Drop it from the published list now, so it's gone even before a widget refreshes.
+    await navigator.locks.request("arctabUpdates", async () => {
+      const { arctabUpdates: all = {} } = await chrome.storage.local.get("arctabUpdates");
+      for (const [id, w] of Object.entries(all)) {
+        w.items = w.items.filter(it => it.url !== url);
+        if (!w.items.length) delete all[id];
+      }
+      await chrome.storage.local.set({ arctabUpdates: all }); // repaints via onChanged
+    });
+  }
+  async function openUpdate(url, background) {
+    await recordSeen(url);
     chrome.tabs.create({ url, active: !background });
     if (!background) closeOverlay();
   }

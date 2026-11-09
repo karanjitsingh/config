@@ -3,6 +3,9 @@
 
    Always light (data-theme="light", set by overlay.js), even in system dark mode. */
 html, body { background: transparent !important; }
+/* style.css reserves scrollbar space on both edges for the homepage; here that left an
+   unblurred strip down each side (with always-visible scrollbars). Nothing scrolls. */
+html { scrollbar-gutter: auto; overflow: hidden; }
 body.overlay { margin: 0; overflow: hidden; }
 body.overlay #cmd-backdrop { backdrop-filter: blur(4px); }
 
@@ -14,7 +17,7 @@ body.overlay #cmd-backdrop { backdrop-filter: blur(4px); }
 }
 
 /* ---- light ---- */
-:root[data-theme="light"] body.overlay #cmd-backdrop { background: rgba(20, 20, 30, .14); }
+:root[data-theme="light"] body.overlay #cmd-backdrop { background: rgba(20, 20, 30, .3); }
 :root[data-theme="light"] #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08); }
 :root[data-theme="light"] #kw-pill {
   color: color-mix(in srgb, var(--t) 72%, #000);
@@ -56,6 +59,10 @@ body.overlay #cmd-backdrop { backdrop-filter: blur(4px); }
   margin: -5px -6px;
 }
 :root[data-theme="light"] .upd-sub { color: rgba(255, 255, 255, .88); text-shadow: 0 1px 2px rgba(0, 0, 0, .55), 0 0 5px rgba(0, 0, 0, .25); }
-:root[data-theme="light"] .upd:hover { background: rgba(255, 255, 255, .48); }
+:root[data-theme="light"] .upd:hover { background: rgba(255, 255, 255, .9); }
+/* On hover the row turns into a solid white chip: dark text, no shadows. */
+:root[data-theme="light"] .upd:hover .upd-title { color: #1d1d1f; text-shadow: none; }
+:root[data-theme="light"] .upd:hover .upd-sub { color: rgba(29, 29, 31, .6); text-shadow: none; }
 :root[data-theme="light"] .upd-kind { color: #fff; background: rgba(91, 108, 255, .85); }
 :root[data-theme="light"] .upd-kind.is-ticket { color: #fff; background: rgba(217, 130, 43, .88); }
+.upd, .upd .upd-title, .upd .upd-sub { transition: background .14s ease, color .14s ease, text-shadow .14s ease; }

@@ -1322,3 +1322,29 @@ body.peeking.cmd-open .peek-backdrop { filter: blur(10px) saturate(.9); opacity:
 .set-sub { margin: 26px 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
 .set-pane > h2 + .set-sub { margin-top: 18px; }
 .set-sub + .set-lede { margin: -2px 2px 10px; }
+
+/* ✓ "mark as read" at the right end of an update line, on hover. */
+.upd { position: relative; }
+.upd-read {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: -3px -4px -3px 0;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  visibility: hidden;
+}
+.upd:hover .upd-read { visibility: visible; }
+.upd-read:hover { color: #1f9d55; background: rgba(31, 157, 85, .12); }
+.upd.leaving { opacity: 0; transform: translateX(8px); transition: opacity .18s, transform .18s; }
+/* Title and note share one line box so they sit on the same center line. */
+.upd-title, .upd-sub { line-height: 18px; }

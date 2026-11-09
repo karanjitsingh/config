@@ -5,6 +5,9 @@
 const LOCAL_EXTRAS_OFF = (() => { try { const v = localStorage.localExtras; return v ? v !== "on" : !(typeof LOCAL_EXTRAS !== "undefined" && LOCAL_EXTRAS.defaultOn); } catch { return true; } })();
 const SEARCH_LOCAL_KEYS = new Set(typeof SEARCH_LOCAL !== "undefined" ? Object.keys(SEARCH_LOCAL) : []);
 const SEARCH = { ...SEARCH_BASE, ...(typeof SEARCH_LOCAL !== "undefined" && !LOCAL_EXTRAS_OFF ? SEARCH_LOCAL : {}) };
+// Live results for a shortcut while you type after its pill: { key: async query => [{ title, sub, url }] }.
+// Functions, so they live here and not in the shortcut list (which is saved as JSON).
+const SEARCH_SUGGEST = typeof SEARCH_SUGGEST_LOCAL !== "undefined" && !LOCAL_EXTRAS_OFF ? SEARCH_SUGGEST_LOCAL : {};
 // A saved shortcut list, split into [shown, kept aside] while local extras are off.
 function splitLocalShortcuts(map) {
   if (!map || !LOCAL_EXTRAS_OFF) return [map, {}];

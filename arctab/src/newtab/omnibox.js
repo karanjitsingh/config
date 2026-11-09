@@ -282,6 +282,7 @@
         if (next.some(r => r.url && norm(r.url) === norm(p.url))) continue;
         next.push(p);
       }
+      if (q && SEARCH_SUGGEST[sc.key]) liveSuggest(sc.key, q, my);
     } else {
       const list = candidates(q, tabsByUrl);
       const inl = allowInline ? inlineCandidate(q, list) : null;
@@ -318,6 +319,30 @@
       input.setSelectionRange(typed.length, input.value.length);
     }
     render(q);
+  }
+
+  // A shortcut's own live results (SEARCH_SUGGEST), right under its search row: the
+  // site's search without leaving the bar. Same debounce and staleness rules as Google's below.
+  const liveCache = new Map();
+  let liveTimer;
+  function liveSuggest(key, q, my) {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(async () => {
+      const ck = `${key}\u0000${q}`;
+      let list = liveCache.get(ck);
+      if (!list) {
+        try { list = await SEARCH_SUGGEST[key](q); liveCache.set(ck, list); } catch { return; }
+      }
+      if (my !== seq || !list?.length) return;
+      const iconUrl = engineOrigin(key);
+      const have = new Set(rows.filter(r => r.url).map(r => norm(r.url)));
+      const extra = list.filter(r => r.url && !have.has(norm(r.url))).slice(0, MAX_ROWS)
+        .map(r => ({ kind: "live", url: r.url, title: r.title, sub: r.sub, iconUrl }));
+      // Right under the search row, so Enter still runs the site's own search.
+      const at = rows[0]?.kind === "keyword" && !rows[0].past ? 1 : 0;
+      rows = [...rows.slice(0, at), ...extra, ...rows.slice(at)].slice(0, MAX_ROWS + 2);
+      render(q);
+    }, 150);
   }
 
   // Google's search suggestions (the same endpoint Chrome's address bar uses).
@@ -419,7 +444,8 @@
     const ico = iconSrc ? el("img", { src: favicon(iconSrc, 32), alt: "", width: 16, height: 16 }) : el("span", { className: "sug-ico" });
     if (!iconSrc) ico.innerHTML = r.svg || (r.past ? CLOCK_ICON : isChrome ? chromeIcon(r.url) : SEARCH_ICON);
     const text = el("span", { className: "sug-text" }, el("span", { className: "sug-title" }, highlight(r.title, terms)));
-    if (r.url && r.kind !== "url") text.append(el("span", { className: "sug-sub" }, " – ", highlight(display(r.url), terms)));
+    if (r.kind === "live") { if (r.sub) text.append(el("span", { className: "sug-sub" }, ` – ${r.sub}`)); }
+    else if (r.url && r.kind !== "url") text.append(el("span", { className: "sug-sub" }, " – ", highlight(display(r.url), terms)));
     else if (r.url && r.title !== display(r.url)) text.append(el("span", { className: "sug-sub" }, " – ", display(r.url)));
     else if (r.sub) text.append(el("span", { className: "sug-sub" }, ` – ${r.sub}`));
     n.append(ico, text);

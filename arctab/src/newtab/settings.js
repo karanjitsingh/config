@@ -153,6 +153,22 @@ if (typeof LOCAL_EXTRAS !== "undefined") {
   $("#local-pane-name").textContent = LOCAL_EXTRAS.label;
   $("#local-row-name").textContent = `${LOCAL_EXTRAS.label} features`;
   if (LOCAL_EXTRAS.description) $("#local-lede").textContent = LOCAL_EXTRAS.description;
+  // Extra switches local/ asks for: LOCAL_EXTRAS.settings = [{ key, label, hint, default }],
+  // each stored as localStorage[key] = "on" | "off". Greyed out while the main switch is off.
+  const group = $("#set-local").closest(".set-group");
+  for (const opt of LOCAL_EXTRAS.settings || []) {
+    const box = el("input", { type: "checkbox", className: "switch" });
+    const sync = () => {
+      box.checked = localStorage[opt.key] ? localStorage[opt.key] === "on" : opt.default !== false;
+      box.disabled = LOCAL_EXTRAS_OFF;
+    };
+    sync();
+    $("#open-settings").addEventListener("click", sync);
+    box.addEventListener("change", () => { localStorage[opt.key] = box.checked ? "on" : "off"; });
+    group.append(el("label", { className: "set-row" },
+      el("span", { className: "set-text" }, el("b", { textContent: opt.label }), ...(opt.hint ? [el("span", { className: "hint", textContent: opt.hint })] : [])),
+      box));
+  }
   $("#set-local").addEventListener("change", async e => {
     const on = e.target.checked;
     localStorage.localExtras = on ? "on" : "off";
