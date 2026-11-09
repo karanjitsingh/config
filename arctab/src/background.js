@@ -12,19 +12,15 @@ const OVERLAY_URL = chrome.runtime.getURL("src/overlay/overlay.html");
 function toggleOverlay(src) {
   const id = "__arctab_overlay";
   const old = document.getElementById(id);
-  const root = document.documentElement;
-  if (old) { old.remove(); root.style.overflow = root.dataset.arctabOverflow || ""; delete root.dataset.arctabOverflow; return "was-open"; }
+  if (old) { old.remove(); return "was-open"; }
   const f = document.createElement("iframe");
   f.id = id;
   f.src = src;
   f.allow = "clipboard-read; clipboard-write";
   f.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;border:0;margin:0;padding:0;z-index:2147483647;background:transparent;color-scheme:normal;");
-  // Keep the page still while the bar is up (wheel/trackpad would scroll it underneath).
-  root.dataset.arctabOverflow = root.style.overflow;
-  root.style.overflow = "hidden";
+  // The page stays still because the frame swallows wheel/trackpad scrolling
+  // (overlay.js). Hiding the page's scrollbar instead would shift its layout.
   const close = () => {
-    root.style.overflow = root.dataset.arctabOverflow || "";
-    delete root.dataset.arctabOverflow;
     removeEventListener("message", onMessage);
     removeEventListener("keydown", onKey, true);
     f.remove();
@@ -59,6 +55,21 @@ async function refreshUpdates() {
   })().finally(() => { refreshing = null; });
 }
 
+// The offscreen page's stand-in for the APIs it doesn't get (src/offscreen/updates.js).
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  // Our own offscreen page only (no tab; its URL can carry extras, so match the path).
+  if (msg?.type !== "arctab:offscreen" || sender.id !== chrome.runtime.id || sender.tab
+      || !String(sender.url || "").startsWith(chrome.runtime.getURL(UPDATES_DOC))) return;
+  const { op, arg } = msg;
+  const run = op === "get" ? chrome.storage.local.get(arg)
+    : op === "set" ? chrome.storage.local.set(arg)
+    : op === "remove" ? chrome.storage.local.remove(arg)
+    : op === "contains" ? chrome.permissions.contains(arg)
+    : Promise.reject(new Error(`unknown op ${op}`));
+  run.then(r => reply(r ?? null), e => reply(null));
+  return true;
+});
+
 chrome.commands.onCommand.addListener(async command => {
   if (command !== "open-search") return;
   refreshUpdates();
@@ -80,6 +91,30 @@ chrome.commands.onCommand.addListener(async command => {
     chrome.tabs.create({}); // can't draw on this page
   }
 });
+
+// ---------- peek: keys and history from inside the peeked page ----------
+// src/peek/peek-keys.js forwards Esc / ⌘O / back / forward to the homepage and keeps the
+// peek's navigation out of the tab's history (with src/peek/peek-main.js). It has to be in every frame (we
+// can't know in advance what you'll peek), so it needs the https/http access that peek
+// already asks for; registered once that's granted.
+let peekKeysChain = Promise.resolve();
+function ensurePeekKeys() {
+  peekKeysChain = peekKeysChain.then(async () => {
+    const matches = ["https://*/*", "http://*/*"];
+    if (!(await chrome.permissions.contains({ origins: matches }))) return;
+    const scripts = [
+      { id: "peek-keys", matches, js: ["src/peek/peek-keys.js"], allFrames: true, runAt: "document_start" },
+      { id: "peek-main", matches, js: ["src/peek/peek-main.js"], allFrames: true, runAt: "document_start", world: "MAIN" },
+    ];
+    const have = new Set((await chrome.scripting.getRegisteredContentScripts({ ids: scripts.map(s => s.id) })).map(s => s.id));
+    const missing = scripts.filter(s => !have.has(s.id));
+    if (missing.length) await chrome.scripting.registerContentScripts(missing);
+  }).catch(e => { if (!/Duplicate script ID/.test(e.message)) console.warn("[arctab] peek keys:", e); });
+}
+chrome.runtime.onInstalled.addListener(ensurePeekKeys);
+chrome.runtime.onStartup.addListener(ensurePeekKeys);
+chrome.permissions.onAdded.addListener(ensurePeekKeys);
+ensurePeekKeys();
 
 try { importScripts("../local/background.local.js"); } catch { /* no private handlers installed */ }
 

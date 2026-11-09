@@ -75,7 +75,11 @@ if (localStorage.overlayUpdates !== "off") addEventListener("DOMContentLoaded", 
   async function markRead(url, row) {
     row.classList.add("leaving");
     await recordSeen(url);
-    // Drop it from the published list now, so it's gone even before a widget refreshes.
+    await dropPublished(url);
+  }
+  // Take it off the published list now, so it's gone even before a widget refreshes
+  // (no homepage open means nothing would republish until the next refresh).
+  async function dropPublished(url) {
     await navigator.locks.request("arctabUpdates", async () => {
       const { arctabUpdates: all = {} } = await chrome.storage.local.get("arctabUpdates");
       for (const [id, w] of Object.entries(all)) {
@@ -87,6 +91,7 @@ if (localStorage.overlayUpdates !== "off") addEventListener("DOMContentLoaded", 
   }
   async function openUpdate(url, background) {
     await recordSeen(url);
+    await dropPublished(url);
     chrome.tabs.create({ url, active: !background });
     if (!background) closeOverlay();
   }

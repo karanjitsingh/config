@@ -104,6 +104,29 @@
   // ---------- ranking ----------
 
   // How well all terms match. Host prefix > host-part prefix > title word > URL word > substring.
+  // Fuzzy fallback: the term's letters in order within a short stretch ("cchandler" →
+  // "CitadelChangeHandler"). Starting each jump on a word or camelCase boundary scores
+  // higher. Only for terms of 3+ letters, and always below a real substring match.
+  function fuzzy(term, text) {
+    if (term.length < 3) return 0;
+    let best = 0;
+    for (let start = text.indexOf(term[0]); start !== -1; start = text.indexOf(term[0], start + 1)) {
+      let i = start, bonus = 0, ok = true;
+      for (let k = 1; k < term.length; k++) {
+        const j = text.indexOf(term[k], i + 1);
+        if (j === -1) { ok = false; break; }
+        if (j === i + 1) bonus += 1; // consecutive
+        else if (/[^a-z0-9]/.test(text[j - 1] || "")) bonus += 0.7; // next word
+        i = j;
+      }
+      if (!ok) break;
+      const span = i - start + 1;
+      if (span > term.length * 3) continue; // too spread out to mean it
+      best = Math.max(best, 8 + 10 * (bonus / (term.length - 1)) - (span - term.length) * 0.3);
+    }
+    return Math.max(0, Math.min(18, best));
+  }
+
   function matchScore(terms, title, url) {
     const u = display(url).toLowerCase();
     const host = u.split(/[/?#]/)[0];
@@ -118,6 +141,7 @@
       else if (wordStart(u, term)) s = 45;
       else if (t.includes(term)) s = 25;
       else if (u.includes(term)) s = 20;
+      else if ((s = fuzzy(term, t) || fuzzy(term, u) * 0.8)) { /* letters in order, close together */ }
       else return 0;
       total += s;
     }
@@ -231,8 +255,10 @@
         const urls = [...(ex?.urls || []), h.url]; // every visit URL for this query, so ✕ removes them all
         if (!ex || score > ex.score) byQuery.set(ql, { query, title: h.title, score, h, urls });
         else { ex.score += score * 0.25; ex.urls = urls; } // repeated searches rank higher
-      } else if (lq && display(h.url).toLowerCase().startsWith(host)) {
-        const mscore = matchScore(lq.split(/\s+/), h.title || "", h.url);
+      } else if (display(h.url).toLowerCase().startsWith(host)) {
+        // Any page you've visited on the site, not just its search results. With nothing
+        // typed yet, your most visited ones.
+        const mscore = lq ? matchScore(lq.split(/\s+/), h.title || "", h.url) : 30;
         if (mscore) pages.push({ kind: "history", url: h.url, title: h.title || display(h.url), h, score: mscore * (1 + frecency(h)) });
       }
     }
@@ -268,19 +294,21 @@
       const iconUrl = engineOrigin(sc.key);
       if (q) next.push({ kind: "keyword", sc, title: q, iconUrl }); // the pill already names the site
       const { queries, pages } = shortcutHistory(sc.key, q);
-      for (const p of queries) {
-        if (next.length >= MAX_ROWS - Math.min(pages.length, 3)) break;
+      // Past searches and visited pages on the site, ranked together.
+      const ranked = [...queries.map(p => ({ p, score: p.score })), ...pages.map(p => ({ p, page: true, score: p.score }))]
+        .sort((a, b) => b.score - a.score);
+      for (const { p, page } of ranked) {
+        if (next.length >= MAX_ROWS) break;
+        if (page) {
+          if (!next.some(r => r.url && norm(r.url) === norm(p.url))) next.push(p);
+          continue;
+        }
         if (p.query.toLowerCase() === q.toLowerCase()) continue;
         // Show what the page title adds beyond the query and the site name
         // ("V123: Shadow mode discrepancy" → "Shadow mode discrepancy").
         const rest = (p.title || "").replace(new RegExp(escRe(p.query), "ig"), "").replace(/^[\s\-–—:|·]+|[\s\-–—:|·]+$/g, "");
         const sub = rest.length > 3 && rest.toLowerCase() !== sc.engine.name.toLowerCase() ? rest : "Recent search";
         next.push({ kind: "keyword", sc: { ...sc, query: p.query }, title: p.query, sub, iconUrl, past: true, urls: p.urls });
-      }
-      for (const p of pages) {
-        if (next.length >= MAX_ROWS) break;
-        if (next.some(r => r.url && norm(r.url) === norm(p.url))) continue;
-        next.push(p);
       }
       if (q && SEARCH_SUGGEST[sc.key]) liveSuggest(sc.key, q, my);
     } else {
@@ -331,7 +359,9 @@
       const ck = `${key}\u0000${q}`;
       let list = liveCache.get(ck);
       if (!list) {
-        try { list = await SEARCH_SUGGEST[key](q); liveCache.set(ck, list); } catch { return; }
+        try { list = await SEARCH_SUGGEST[key](q); } catch { return; }
+        // Status rows ("loading…", "sign in") are marked transient: ask again next keystroke.
+        if (!list?.some(r => r.transient)) liveCache.set(ck, list);
       }
       if (my !== seq || !list?.length) return;
       const iconUrl = engineOrigin(key);

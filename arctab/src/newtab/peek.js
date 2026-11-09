@@ -61,6 +61,14 @@ const peek = {
     // "Expand": open the page right here, replacing the homepage in this tab.
     const toTab = el("button", { type: "button", className: "peek-btn wide", title: "Open this page in this tab (⌘O)" },
       el("span", { textContent: "Expand" }), el("kbd", { className: "peek-kbd", textContent: "⌘O" }));
+    // The peek's own back/forward (its navigation stays out of the tab's history).
+    const chevron = d => `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+    this.backBtn = el("button", { type: "button", className: "peek-btn peek-nav", title: "Back (⌘[)", ariaLabel: "Back", disabled: true });
+    this.fwdBtn = el("button", { type: "button", className: "peek-btn peek-nav", title: "Forward (⌘])", ariaLabel: "Forward", disabled: true });
+    this.backBtn.innerHTML = chevron("M10 3.5 5.5 8l4.5 4.5");
+    this.fwdBtn.innerHTML = chevron("M6 3.5 10.5 8 6 12.5");
+    this.backBtn.addEventListener("click", () => this.go(-1));
+    this.fwdBtn.addEventListener("click", () => this.go(1));
     this.icon = el("img", { className: "peek-ico", alt: "", width: 16, height: 16 });
     this.title = el("span", { className: "peek-title" });
     this.host = el("span", { className: "peek-host" });
@@ -69,18 +77,31 @@ const peek = {
       el("button", { type: "button", className: "peek-btn wide", onclick: () => this.toTab() },
         el("span", { textContent: "Expand" }), el("kbd", { className: "peek-kbd", textContent: "⌘O" })));
     const panel = el("div", { className: "peek-panel" },
-      el("div", { className: "peek-bar" }, this.icon, this.title, this.host, el("span", { className: "peek-gap" }), toTab, close),
+      el("div", { className: "peek-bar" }, this.backBtn, this.fwdBtn, this.icon, this.title, this.host, el("span", { className: "peek-gap" }), toTab, close),
       this.body = el("div", { className: "peek-body" }, this.hint));
     this.root = el("div", { className: "peek-backdrop hidden" }, panel);
     this.root.addEventListener("mousedown", e => { if (e.target === this.root) this.close(); });
     close.addEventListener("click", () => this.close());
     toTab.addEventListener("click", () => this.toTab());
+    // Keys and page changes from inside the peeked page (src/peek/peek-keys.js, peek-main.js).
+    addEventListener("message", e => {
+      const kind = e.data?.arctabPeek;
+      if (!kind || !this.isOpen() || e.source !== this.frame?.contentWindow) return;
+      if (kind === "page" || kind === "replace") return this.onPage(kind, String(e.data.url || ""), String(e.data.title || ""));
+      if (document.body.classList.contains("cmd-open")) return; // the bar on top has the keys
+      if (kind === "close") this.close();
+      if (kind === "expand") this.toTab();
+      if (kind === "back") this.go(-1);
+      if (kind === "forward") this.go(1);
+    });
     document.addEventListener("keydown", e => {
       // The bar on top handles its own keys (its Esc has already closed it by the time
       // this runs, so look at defaultPrevented too).
       if (!this.isOpen() || e.defaultPrevented || document.body.classList.contains("cmd-open")) return;
       if (e.key === "Escape") { e.preventDefault(); this.close(); }
       if ((e.metaKey || e.ctrlKey) && (e.key === "o" || e.key === "O" || e.key === "Enter")) { e.preventDefault(); this.toTab(); }
+      if (((e.metaKey || e.ctrlKey) && e.key === "[") || (e.altKey && e.key === "ArrowLeft")) { e.preventDefault(); this.go(-1); }
+      if (((e.metaKey || e.ctrlKey) && e.key === "]") || (e.altKey && e.key === "ArrowRight")) { e.preventDefault(); this.go(1); }
     });
     document.body.append(this.root);
   },
@@ -99,9 +120,34 @@ const peek = {
       this.root.classList.remove("loading");
       clearTimeout(this.hintTimer);
     });
-    frame.src = url;
+    // Its own history: pages it has shown, and where it is in them.
+    frame.nav = { list: [url], i: 0, pending: -1, started: false };
+    frame.src = url; // set before inserting, so even the first load adds no history entry
     this.body.prepend(frame);
     return frame;
+  },
+  // A page loaded (or a single-page app changed URL) inside the current peek.
+  onPage(kind, url, title) {
+    const n = this.frame.nav;
+    if (!url) return;
+    if (kind === "replace" || !n.started) { n.list[n.i] = url; n.started = true; } // first load (after redirects) or a URL tweak
+    else if (n.pending >= 0) { n.i = n.pending; n.list[n.i] = url; n.pending = -1; } // our own back/forward landed
+    else if (url !== n.list[n.i]) { n.list = [...n.list.slice(0, n.i + 1), url]; n.i++; } // somewhere new
+    if (title) { this.title.textContent = title; this.host.textContent = hostOf(url); }
+    this.updateNav();
+  },
+  go(step) {
+    const n = this.frame?.nav;
+    const to = n ? n.i + step : -1;
+    if (!n || to < 0 || to >= n.list.length) return;
+    n.pending = to;
+    this.root.classList.add("loading");
+    this.frame.contentWindow.postMessage({ arctabPeekGo: n.list[to] }, "*"); // peek-keys.js loads it in place
+  },
+  updateNav() {
+    const n = this.frame?.nav;
+    this.backBtn.disabled = !n || n.i <= 0;
+    this.fwdBtn.disabled = !n || n.i >= n.list.length - 1;
   },
   isOpen() { return this.root && !this.root.classList.contains("hidden"); },
   // Grow out of the clicked link and shrink back into it (falls back to a plain zoom).
@@ -140,6 +186,7 @@ const peek = {
       this.hintTimer = setTimeout(() => this.hint.classList.remove("hidden"), 5000);
     }
     for (const f of this.body.querySelectorAll(".peek-frame")) f.classList.toggle("hidden", f !== this.frame);
+    this.updateNav();
     this.root.classList.remove("hidden");
     document.body.classList.add("peeking");
     this.root.querySelector(".peek-btn.wide").focus(); // keys go to the homepage (Esc, ⌘O) until you click into the page
@@ -166,8 +213,9 @@ const peek = {
     this.closing = false;
   },
   toTab() {
-    // Navigate this tab to the page (Back returns to the homepage).
-    location.href = this.url;
+    // Navigate this tab to the page you're on in the peek (Back returns to the homepage).
+    const n = this.frame?.nav;
+    location.href = n?.list[n.i] || this.url;
   },
 };
 

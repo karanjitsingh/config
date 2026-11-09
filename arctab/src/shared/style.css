@@ -1348,3 +1348,8 @@ body.peeking.cmd-open .peek-backdrop { filter: blur(10px) saturate(.9); opacity:
 .upd.leaving { opacity: 0; transform: translateX(8px); transition: opacity .18s, transform .18s; }
 /* Title and note share one line box so they sit on the same center line. */
 .upd-title, .upd-sub { line-height: 18px; }
+
+/* Peek's own back/forward, at the left of its bar. */
+.peek-btn.peek-nav { display: inline-grid; place-items: center; padding: 0; width: 28px; }
+.peek-btn.peek-nav:disabled { opacity: .35; cursor: default; background: transparent; }
+.peek-btn.peek-nav + .peek-btn.peek-nav { margin-right: 4px; }

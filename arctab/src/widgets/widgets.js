@@ -14,6 +14,7 @@
 //     async fetch() { return data }, // JSON-serialisable; throw widgetAuthError(url) when signed out
 //     render(data) { return [nodes] },
 //     count(data) { return n },      // optional: number shown next to the title
+//     prepare() { … },               // optional, async: load state updates() relies on
 //     updates(data) { return [{ kind, title, sub, url }] }, // kind: a short type label, e.g. "review" // optional: what's new, shown under
 //                                    // the quick search bar (Ctrl+T) until you've seen it
 //   });

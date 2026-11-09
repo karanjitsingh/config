@@ -4,6 +4,7 @@
   for (const def of WIDGETS.values()) {
     if (!def.updates) continue;
     try {
+      await def.prepare?.(); // e.g. load seen-marks, so updates() isn't computed from nothing
       const cached = widgetCache.get(def.id);
       if (cached && Date.now() - cached.at < (def.refreshMs ?? 60_000)) { await publishUpdates(def, cached); continue; }
       if (def.origins?.length && !(await chrome.permissions.contains({ origins: def.origins }))) continue;
