@@ -12,6 +12,10 @@ const FAV_TITLE = "Favorites";
 const ARCHIVE_TITLE = "Archive";
 const LEGACY_HOME_TITLE = "Home"; // v2 kept everything in Other bookmarks/Home
 
+// Running in an incognito window (ArcTab allowed in incognito at chrome://extensions).
+// Then everything is a plain search bar: no bookmarks, history, tabs, widgets or updates.
+const IN_INCOGNITO = !!chrome.extension?.inIncognitoContext;
+
 const isFolder = n => !n.url;
 const bm = chrome.bookmarks;
 

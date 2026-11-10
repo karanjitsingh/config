@@ -196,7 +196,7 @@ setInterval(tick, 10_000);
 // bar, and the homepage is built when you ask for it (type "home").
 var homeShown = false;
 function showHome() {
-  if (homeShown) return;
+  if (homeShown || IN_INCOGNITO) return; // incognito never shows the homepage
   homeShown = true;
   document.body.classList.remove("search-only");
   $("#so-favs").replaceChildren();
@@ -213,5 +213,6 @@ function searchFavs() {
 
 if (REOPENING) { /* focus.js is replacing this tab */ }
 else if (!bm) showError("The extension doesn't have bookmarks permission yet. Open chrome://extensions and click the reload icon on ArcTab.");
+else if (IN_INCOGNITO) { document.body.classList.add("search-only", "private"); markReady(); }
 else if (localStorage.newTabMode === "search") { document.body.classList.add("search-only"); markReady(); searchFavs(); }
 else showHome();

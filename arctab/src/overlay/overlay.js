@@ -4,8 +4,9 @@
 // just removes the frame, so no tab is created unless you actually go somewhere.
 
 const ARCTAB_OVERLAY = true;
-// Always the light look, whatever the system setting (tuned to read on any page).
-document.documentElement.dataset.theme = "light";
+// Always the light look, whatever the system setting (tuned to read on any page); in an
+// incognito window, the incognito look. (shared.js isn't loaded yet, so check directly.)
+document.documentElement.dataset.theme = chrome.extension?.inIncognitoContext ? "private" : "light";
 const REOPENING = false; // the new tab page's focus hand-off doesn't apply here
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...children) => {
@@ -29,7 +30,7 @@ function closeOverlay() { parent.postMessage("arctab:close", "*"); }
 // overlay; ⌘-click opens it in the background and keeps the overlay up; Shift-click opens
 // it in an incognito window.
 // Runs after the shared scripts below have loaded (favoriteStrip lives in shared.js).
-if (localStorage.overlayFavs !== "off") addEventListener("DOMContentLoaded", () => {
+if (localStorage.overlayFavs !== "off" && !chrome.extension?.inIncognitoContext) addEventListener("DOMContentLoaded", () => {
   favoriteStrip(document.getElementById("so-favs"), (url, e) => {
     if (e.shiftKey) { openIncognito(url); return closeOverlay(); }
     const bg = e.metaKey || e.ctrlKey;
@@ -40,7 +41,7 @@ if (localStorage.overlayFavs !== "off") addEventListener("DOMContentLoaded", () 
 
 // Settings → "Show updates in the Ctrl+T search": what's new from widgets that publish
 // updates (code reviews, ticket follow-ups), as of the last time a homepage refreshed them.
-if (localStorage.overlayUpdates !== "off") addEventListener("DOMContentLoaded", () => {
+if (localStorage.overlayUpdates !== "off" && !chrome.extension?.inIncognitoContext) addEventListener("DOMContentLoaded", () => {
   const box = document.getElementById("ov-updates");
   const MAX = 4, FRESH_MS = 24 * 3600e3;
   async function paint() {
@@ -103,6 +104,7 @@ if (localStorage.overlayUpdates !== "off") addEventListener("DOMContentLoaded", 
 
 // "ArcTab Home" from the overlay opens the homepage in a new tab.
 function showHome() {
-  chrome.tabs.create({ url: chrome.runtime.getURL("src/newtab/index.html") });
+  if (IN_INCOGNITO) return;
+  chrome.windows.getCurrent().then(w => chrome.tabs.create({ url: chrome.runtime.getURL("src/newtab/index.html"), windowId: w.id }));
   closeOverlay();
 }

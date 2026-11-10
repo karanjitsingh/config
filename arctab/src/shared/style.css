@@ -142,7 +142,7 @@ body.navigating .cmd-ico { color: var(--accent); }
   }
 }
 #kw-pill img { width: 18px; height: 18px; border-radius: 4px; }
-@keyframes pill-in { from { opacity: 0; transform: scale(.85); } }
+@keyframes pill-in { from { opacity: 0; } }
 /* Incognito switch at the right end of the input row. On, the bar goes dark (in light
    and dark mode alike) and the label shows, so it's obvious where Enter will go. */
 #incog {
@@ -164,6 +164,8 @@ body.navigating .cmd-ico { color: var(--accent); }
 }
 #incog svg { display: block; }
 #incog span { display: none; }
+/* No button at rest: it only shows (as an "Incognito" tag) while ⌥⌘N has it on. */
+#cmd:not(.incognito) #incog, #incog[hidden] { display: none !important; }
 #incog:hover { color: var(--text); background: var(--hover); }
 #cmd.incognito {
   --card: #1e1e23; --text: #f2f2f5; --muted: #9a9aa3; --border: #34343c;
@@ -1383,3 +1385,13 @@ body.peeking.cmd-open .peek-backdrop { filter: blur(10px) saturate(.9); opacity:
 .peek-btn.peek-nav { display: inline-grid; place-items: center; padding: 0; width: 28px; }
 .peek-btn.peek-nav:disabled { opacity: .35; cursor: default; background: transparent; }
 .peek-btn.peek-nav + .peek-btn.peek-nav { margin-right: 4px; }
+
+/* ---- incognito window: a plain search bar in Chrome's incognito colors ---- */
+body.private {
+  --bg: #202124; --card: #2d2e31; --text: #e8eaed; --muted: #9aa0a6;
+  --border: #3c4043; --hover: #35363a; --accent: #8ab4f8; --sel: #394457;
+  background: #202124;
+  color-scheme: dark;
+}
+body.private.search-only #cmd-backdrop { background: #202124; }
+body.private #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .05); }

@@ -66,3 +66,11 @@ body.overlay #cmd-backdrop { backdrop-filter: blur(4px); }
 :root[data-theme="light"] .upd-kind { color: #fff; background: rgba(91, 108, 255, .85); }
 :root[data-theme="light"] .upd-kind.is-ticket { color: #fff; background: rgba(217, 130, 43, .88); }
 .upd, .upd .upd-title, .upd .upd-sub { transition: background .14s ease, color .14s ease, text-shadow .14s ease; }
+
+/* ---- incognito window (data-theme="private"): Chrome's incognito colors ---- */
+:root[data-theme="private"] {
+  --bg: #202124; --card: #2d2e31; --text: #e8eaed; --muted: #9aa0a6;
+  --border: #3c4043; --hover: #35363a; --accent: #8ab4f8; --sel: #394457;
+}
+:root[data-theme="private"] body.overlay #cmd-backdrop { background: rgba(0, 0, 0, .4); }
+:root[data-theme="private"] #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .05); }

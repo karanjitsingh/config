@@ -78,17 +78,18 @@ chrome.commands.onCommand.addListener(async command => {
   if (ctrlTOverlay === false) return chrome.tabs.create({});
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab) return chrome.tabs.create({});
+  const newTab = () => chrome.tabs.create({ windowId: tab.windowId }); // same window, incognito or not
   if (tab.url?.startsWith(HOME_PREFIX) || /^chrome:\/\/newtab/.test(tab.url || "")) {
     // Pressed again with the bar already up: open a real new tab, like Arc's ⌘T ⌘T.
     const reply = await chrome.runtime.sendMessage({ type: "arctab:open-bar" }).catch(() => null);
-    if (reply === "was-open") chrome.tabs.create({});
+    if (reply === "was-open") newTab();
     return;
   }
   try {
     const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: toggleOverlay, args: [OVERLAY_URL] });
-    if (res?.result === "was-open") chrome.tabs.create({});
+    if (res?.result === "was-open") newTab();
   } catch {
-    chrome.tabs.create({}); // can't draw on this page
+    newTab(); // can't draw on this page
   }
 });
 

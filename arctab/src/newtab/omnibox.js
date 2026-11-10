@@ -277,7 +277,7 @@
 
     const sc = keyword ? { key: keyword, engine: SEARCH[keyword], query: q } : null;
     let tabsByUrl = new Map();
-    if (!sc) {
+    if (!sc && !IN_INCOGNITO) {
       // The tab this runs in (the overlay's host page counts too) isn't a "switch to" target.
       const here = OVERLAY ? chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(t => t[0]) : chrome.tabs.getCurrent();
       const [cur, tabs] = await Promise.all([here, chrome.tabs.query({})]);
@@ -311,7 +311,7 @@
         const sub = rest.length > 3 && rest.toLowerCase() !== sc.engine.name.toLowerCase() ? rest : "Recent search";
         next.push({ kind: "keyword", sc: { ...sc, query: p.query }, title: p.query, sub, iconUrl, past: true, urls: p.urls });
       }
-      if (q && SEARCH_SUGGEST[sc.key]) liveSuggest(sc.key, q, my);
+      if (q && SEARCH_SUGGEST[sc.key] && !IN_INCOGNITO) liveSuggest(sc.key, q, my);
     } else {
       const list = candidates(q, tabsByUrl);
       const inl = allowInline ? inlineCandidate(q, list) : null;
@@ -327,7 +327,7 @@
         if (page) next.push(page);
       }
       // "home" / "arctab": show the homepage (mostly for search-only new tabs).
-      if (q.length >= 2 && ["home", "arctab", "arctab home"].some(w => w.startsWith(lq0(q)))) {
+      if (!IN_INCOGNITO && q.length >= 2 && ["home", "arctab", "arctab home"].some(w => w.startsWith(lq0(q)))) {
         const exact = ["home", "arctab"].includes(lq0(q));
         next.splice(exact ? 0 : next.length, 0, { kind: "home", title: "ArcTab Home", sub: "Show your homepage", svg: HOME_ICON });
       }
@@ -343,7 +343,7 @@
     sel = 0;
     // Nothing of yours matched: fill in with Google's suggestions, like the address bar.
     // Not in incognito: the request carries your Google cookies, so the query would be tied to you.
-    if (!sc && !incognito && !next.some(r => r.url) && !looksLikeUrl(q)) googleSuggest(q, my);
+    if (!sc && !incognito && !IN_INCOGNITO && !next.some(r => r.url) && !looksLikeUrl(q)) googleSuggest(q, my);
     if (completion && input.value === typed) {
       input.value = typed + completion.text.slice(typed.length);
       input.setSelectionRange(typed.length, input.value.length);
@@ -517,7 +517,8 @@
 
   async function openUrl(url, newTab, incog = incognito) {
     if (incog) { await openIncognito(url); resetBar(); return searchOnly() ? undefined : closeBar(); }
-    if (OVERLAY) { await chrome.tabs.create({ url }); return closeOverlay(); }
+    // In the window this bar is in (an incognito window stays incognito).
+    if (OVERLAY) { await chrome.tabs.create({ url, windowId: (await chrome.windows.getCurrent()).id }); return closeOverlay(); }
     if (newTab) return chrome.tabs.create({ url });
     const cur = await chrome.tabs.getCurrent();
     chrome.tabs.update(cur.id, { url });
@@ -581,7 +582,8 @@
     if (navigates) showNavigating(r);
     switch (r.kind) {
       case "search":
-        if (!chrome.search) return openUrl(SEARCH.g.url.replace("%s", encodeURIComponent(r.text)), newTab);
+        // chrome.search can't target an incognito window: go to Google directly there.
+        if (!chrome.search || IN_INCOGNITO) return openUrl(SEARCH.g.url.replace("%s", encodeURIComponent(r.text)), newTab);
         if (OVERLAY) { chrome.search.query({ text: r.text, disposition: "NEW_TAB" }); return closeOverlay(); }
         return chrome.search.query({ text: r.text, disposition: newTab ? "NEW_TAB" : "CURRENT_TAB" });
       case "keyword":
@@ -609,6 +611,7 @@
   // Click it or press ⌥⌘N (Chrome keeps ⌘⇧N for itself). Lasts until the bar resets.
 
   const incogBtn = document.getElementById("incog");
+  if (IN_INCOGNITO && incogBtn) incogBtn.hidden = true; // already incognito
   function setIncognito(on) {
     incognito = on;
     cmd.classList.toggle("incognito", on);
@@ -739,7 +742,7 @@
   input.addEventListener("keydown", e => {
     const k = e.key;
     // 1–9 in an empty bar opens that favorite, 0 the ArcTab homepage (search-only tab / Ctrl+T overlay).
-    if (k === "0" && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off" && (searchOnly() || OVERLAY)) {
+    if (k === "0" && !IN_INCOGNITO && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off" && (searchOnly() || OVERLAY)) {
       e.preventDefault(); resetBar(); showHome(); closeBar(); return;
     }
     if (/^[1-9]$/.test(k) && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off") {
@@ -869,7 +872,7 @@
 
   // Load suggestion data after the first frame so it never delays the page appearing.
   const later = window.requestIdleCallback || (f => setTimeout(f, 1));
-  later(() => { loadBookmarks(); loadHistory(); }, { timeout: 300 });
+  if (!IN_INCOGNITO) later(() => { loadBookmarks(); loadHistory(); }, { timeout: 300 }); // incognito: nothing of yours
   if (searchOnly() || OVERLAY) openBar({ clear: true });
   // The page hands focus to the overlay frame itself; pass it on to the input.
   if (OVERLAY) addEventListener("focus", () => { if (document.activeElement !== input) input.focus(); });
