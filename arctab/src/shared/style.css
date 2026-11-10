@@ -955,8 +955,14 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 .peek-panel {
   display: flex;
   flex-direction: column;
-  width: min(1280px, calc(100vw - 64px));
-  height: calc(100vh - 64px);
+  /* Sized for the window it's in:
+     - height: nearly all of a short window (the margin shrinks to 20px a side), more
+       breathing room on a tall one, and no taller than 1240px;
+     - width: most of a narrow window, but never wider than 1.6x its height (so a wide or
+       ultrawide window gets a page-shaped panel, not a banner) or 1680px. */
+  --peek-h: min(100vh - clamp(40px, 9vh, 140px), 1240px);
+  height: var(--peek-h);
+  width: min(100vw - clamp(40px, 8vw, 200px), var(--peek-h) * 1.6, 1680px);
   overflow: hidden;
   background: var(--card);
   border: 0; /* a light 1px border showed as a white rim around dark pages */
@@ -1385,6 +1391,10 @@ body.peeking.cmd-open .peek-backdrop { filter: blur(10px) saturate(.9); opacity:
 .peek-btn.peek-nav { display: inline-grid; place-items: center; padding: 0; width: 28px; }
 .peek-btn.peek-nav:disabled { opacity: .35; cursor: default; background: transparent; }
 .peek-btn.peek-nav + .peek-btn.peek-nav { margin-right: 4px; }
+/* Title bar matches the top of the peeked page (peek.setColor). */
+.peek-bar.tinted { background: var(--peek-bar); border-bottom-color: transparent; transition: background-color .2s ease; }
+.peek-bar.tinted:not(.on-dark) { --hover: rgba(0, 0, 0, .06); --border: rgba(0, 0, 0, .14); }
+.peek-bar.on-dark { --text: #f5f5f7; --muted: rgba(255, 255, 255, .62); --hover: rgba(255, 255, 255, .12); --border: rgba(255, 255, 255, .22); --accent: #fff; color: var(--text); }
 
 /* ---- incognito window: a plain search bar in Chrome's incognito colors ---- */
 body.private {

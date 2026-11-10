@@ -87,7 +87,11 @@ const peek = {
     addEventListener("message", e => {
       const kind = e.data?.arctabPeek;
       if (!kind || !this.isOpen() || e.source !== this.frame?.contentWindow) return;
-      if (kind === "page" || kind === "replace") return this.onPage(kind, String(e.data.url || ""), String(e.data.title || ""));
+      if (kind === "page" || kind === "replace") {
+        this.frame.contentWindow.postMessage({ arctabPeekColor: true }, "*"); // an app's new view may recolor its header
+        return this.onPage(kind, String(e.data.url || ""), String(e.data.title || ""));
+      }
+      if (kind === "color") return this.setColor(this.frame.peekColor = String(e.data.color || ""));
       if (document.body.classList.contains("cmd-open")) return; // the bar on top has the keys
       if (kind === "close") this.close();
       if (kind === "expand") this.toTab();
@@ -144,6 +148,16 @@ const peek = {
     this.root.classList.add("loading");
     this.frame.contentWindow.postMessage({ arctabPeekGo: n.list[to] }, "*"); // peek-keys.js loads it in place
   },
+  // Title bar in the page's top color (from peek-keys.js); dark colors get light text.
+  setColor(color) {
+    const m = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(color || "");
+    const bar = this.root.querySelector(".peek-bar");
+    if (!m) { bar.style.removeProperty("--peek-bar"); bar.classList.remove("tinted", "on-dark"); return; }
+    const [r, g, b] = m.slice(1).map(Number);
+    bar.style.setProperty("--peek-bar", color);
+    bar.classList.add("tinted");
+    bar.classList.toggle("on-dark", 0.299 * r + 0.587 * g + 0.114 * b < 150);
+  },
   updateNav() {
     const n = this.frame?.nav;
     this.backBtn.disabled = !n || n.i <= 0;
@@ -185,6 +199,7 @@ const peek = {
       this.frame = this.makeFrame(url);
       this.hintTimer = setTimeout(() => this.hint.classList.remove("hidden"), 5000);
     }
+    this.setColor(this.frame.peekColor); // a cached page keeps its color; a new one starts plain
     for (const f of this.body.querySelectorAll(".peek-frame")) f.classList.toggle("hidden", f !== this.frame);
     this.updateNav();
     this.root.classList.remove("hidden");
