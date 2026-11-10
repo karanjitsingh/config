@@ -141,6 +141,7 @@ function linkNode(b, kind, parents) {
       e.preventDefault();
       showMenu(e.clientX, e.clientY, [
         ["Open in new tab", () => window.open(b.url, "_blank")],
+        ["Open in incognito window", () => openIncognito(b.url)],
         ["Edit", () => editLink(b)],
         ["Unpin", () => removeLink(b, "Unpinned"), "danger"],
       ]);

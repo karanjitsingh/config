@@ -29,6 +29,7 @@
   let completion = null;         // { text, url } shown inline after the caret
   let seq = 0;
   let keyword = null;            // active search shortcut key, shown as a pill before the input
+  let incognito = false;         // the bar's incognito switch: everything opens in an incognito window
 
   // ---------- helpers ----------
 
@@ -341,7 +342,8 @@
     rows = next;
     sel = 0;
     // Nothing of yours matched: fill in with Google's suggestions, like the address bar.
-    if (!sc && !next.some(r => r.url) && !looksLikeUrl(q)) googleSuggest(q, my);
+    // Not in incognito: the request carries your Google cookies, so the query would be tied to you.
+    if (!sc && !incognito && !next.some(r => r.url) && !looksLikeUrl(q)) googleSuggest(q, my);
     if (completion && input.value === typed) {
       input.value = typed + completion.text.slice(typed.length);
       input.setSelectionRange(typed.length, input.value.length);
@@ -495,7 +497,7 @@
       n.append(x);
     }
     n.addEventListener("mousedown", e => e.preventDefault()); // keep focus in the input
-    n.addEventListener("click", e => activate(r, e.metaKey || e.ctrlKey));
+    n.addEventListener("click", e => activate(r, e.metaKey || e.ctrlKey, incognito || e.shiftKey));
     n.addEventListener("mousemove", () => { if (sel !== i) { sel = i; mark(); } });
     return n;
   }
@@ -513,7 +515,8 @@
 
   // ---------- actions ----------
 
-  async function openUrl(url, newTab) {
+  async function openUrl(url, newTab, incog = incognito) {
+    if (incog) { await openIncognito(url); resetBar(); return searchOnly() ? undefined : closeBar(); }
     if (OVERLAY) { await chrome.tabs.create({ url }); return closeOverlay(); }
     if (newTab) return chrome.tabs.create({ url });
     const cur = await chrome.tabs.getCurrent();
@@ -567,8 +570,10 @@
   // Coming back via the back/forward cache shouldn't show a stuck loading state.
   addEventListener("pageshow", stopNavigating);
 
-  function activate(r, newTab) {
+  // incog: open it in an incognito window (Shift+Enter, or the bar's incognito switch).
+  function activate(r, newTab, incog = incognito) {
     if (!r) return;
+    if (incog && !["home", "keyhint", "info"].includes(r.kind)) return openPrivately(r);
     // Anything already open in another tab switches to it (like Arc); ⌘Enter opens a copy.
     if (r.tab && !newTab) return switchTo(r.tab);
     if (r.kind === "home") { resetBar(); closeBar(); return showHome(); }
@@ -592,11 +597,34 @@
     }
   }
 
+  // chrome.search can't reach an incognito window, so searches there use Google directly.
+  function openPrivately(r) {
+    const url = r.kind === "search" ? SEARCH.g.url.replace("%s", encodeURIComponent(r.text))
+      : r.kind === "keyword" ? shortcutUrl(r.sc.engine, r.sc.query)
+      : r.url;
+    if (url) return openUrl(url, true, true);
+  }
+
+  // ---------- incognito switch ----------
+  // Click it or press ⌥⌘N (Chrome keeps ⌘⇧N for itself). Lasts until the bar resets.
+
+  const incogBtn = document.getElementById("incog");
+  function setIncognito(on) {
+    incognito = on;
+    cmd.classList.toggle("incognito", on);
+    incogBtn.setAttribute("aria-pressed", on);
+    if (!keyword) input.placeholder = on ? INCOG_PLACEHOLDER : PLACEHOLDER;
+    if (typed.trim() || keyword) update(false);
+  }
+  incogBtn.addEventListener("mousedown", e => e.preventDefault()); // keep focus in the input
+  incogBtn.addEventListener("click", () => setIncognito(!incognito));
+
   // ---------- shortcut pill (Arc-style "Tab to search") ----------
 
   const pill = document.getElementById("kw-pill");
   const cmd = document.getElementById("cmd");
   const PLACEHOLDER = input.placeholder;
+  const INCOG_PLACEHOLDER = "Search in an incognito window";
 
   function engineOrigin(key) {
     try {
@@ -660,7 +688,7 @@
   function hidePill() {
     pill.classList.add("hidden");
     cmd.classList.remove("has-pill");
-    input.placeholder = PLACEHOLDER;
+    input.placeholder = incognito ? INCOG_PLACEHOLDER : PLACEHOLDER;
   }
 
   function enterKeyword(key, rest = "") {
@@ -716,7 +744,7 @@
     }
     if (/^[1-9]$/.test(k) && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off") {
       const tile = document.querySelector(`.fav-strip .fav[data-n="${k}"]`);
-      if (tile?.offsetParent) { e.preventDefault(); tile.click(); return; }
+      if (tile?.offsetParent) { e.preventDefault(); incognito ? openUrl(tile.href, true, true) : tile.click(); return; }
     }
     if (document.body.classList.contains("navigating")) {
       if (k === "Escape") stopNavigating();
@@ -728,9 +756,12 @@
       e.preventDefault();
       sel = (sel + (k === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
       mark();
+    } else if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === "KeyN") {
+      e.preventDefault();
+      setIncognito(!incognito);
     } else if (k === "Enter") {
       e.preventDefault();
-      activate(rows[sel], e.metaKey || e.ctrlKey || e.altKey);
+      activate(rows[sel], e.metaKey || e.ctrlKey || e.altKey, incognito || e.shiftKey);
     } else if (k === "Tab" && !e.shiftKey && typed.trim()) {
       e.preventDefault();
       if (!keyword && SEARCH[typed.trim()] && !/\s/.test(typed)) enterKeyword(typed.trim());
@@ -758,11 +789,11 @@
 
   const isOpen = () => document.body.classList.contains("cmd-open");
   const searchOnly = () => document.body.classList.contains("search-only");
-  function resetBar() { input.value = typed = ""; rows = []; keyword = null; hidePill(); render(""); }
+  function resetBar() { input.value = typed = ""; rows = []; keyword = null; hidePill(); setIncognito(false); render(""); }
   const closeTab = () => chrome.tabs.getCurrent(t => t && chrome.tabs.remove(t.id));
 
   function openBar({ clear = false } = {}) {
-    if (clear) { input.value = typed = ""; rows = []; keyword = null; hidePill(); render(""); }
+    if (clear) { input.value = typed = ""; rows = []; keyword = null; hidePill(); setIncognito(false); render(""); }
     document.body.classList.add("cmd-open");
     input.focus();
     input.select();

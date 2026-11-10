@@ -93,6 +93,16 @@ async function favoriteStrip(nav, onOpen) {
   }));
 }
 
+// Open a page in a Chrome incognito window: a new tab in the one already open, if ArcTab
+// can see it (only when it's allowed in incognito at chrome://extensions), else a new window.
+async function openIncognito(url) {
+  const wins = await chrome.windows.getAll({ windowTypes: ["normal"] }).catch(() => []);
+  const win = wins.find(w => w.incognito && w.focused) || wins.find(w => w.incognito);
+  if (!win) return chrome.windows.create({ url, incognito: true, focused: true });
+  await chrome.tabs.create({ windowId: win.id, url, active: true });
+  await chrome.windows.update(win.id, { focused: true });
+}
+
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 }

@@ -39,6 +39,14 @@ Favorites, Archive, and the Bookmarks bar are matched by name/role, so they can'
   Shortcuts: `code` + `Tab`/`Space`, then your query. They live in `src/shared/config.js`; put private
   ones in a git-ignored `local/config.local.js`:
   `const SEARCH_LOCAL = { code: { name: "Code", url: "https://example.com/search?q=%s" } };`
+- Incognito: the glasses button at the right of the search bar (or `⌥⌘N` in it) turns the bar
+  dark, and whatever you pick opens in a Chrome incognito window, so it isn't saved to history.
+  Google suggestions are off while it's on (that request would carry your Google cookies), and
+  searches use Google, since Chrome's default engine can't be sent to an incognito window. It
+  switches off when the bar resets. `Shift+Enter` (or Shift-click) opens a single result that
+  way; favorite tiles have "Open in incognito window" on right-click, and Shift-click in the
+  Ctrl+T bar. Allow ArcTab in incognito (Details at `chrome://extensions`) to reuse an open
+  incognito window instead of opening a new one each time.
 - New tabs show the homepage with keyboard focus on the page (not the address bar). Start
   typing (or `/`, `⌘K`, `⌘V`) and an Arc-style command bar appears over a blurred homepage;
   `Esc`, deleting all the text, or clicking outside returns to the homepage. Focus works by
