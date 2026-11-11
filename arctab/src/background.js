@@ -9,20 +9,41 @@ const HOME_PREFIX = chrome.runtime.getURL("");
 const OVERLAY_URL = chrome.runtime.getURL("src/overlay/overlay.html");
 
 // Runs in the page: add the overlay frame, or remove it if it's already there.
-function toggleOverlay(src) {
+function toggleOverlay(src, zoom) {
   const id = "__arctab_overlay";
   const old = document.getElementById(id);
   if (old) { old.remove(); return "was-open"; }
   const f = document.createElement("iframe");
   f.id = id;
-  f.src = src;
+  f.src = zoom && Math.abs(zoom - 1) > 0.001 ? `${src}?zoom=${zoom}` : src; // the overlay undoes page zoom (⌘+ / ⌘−)
   f.allow = "clipboard-read; clipboard-write";
   f.setAttribute("style", "position:fixed;inset:0;width:100vw;height:100vh;border:0;margin:0;padding:0;z-index:2147483647;background:transparent;color-scheme:normal;");
   // The page stays still because the frame swallows wheel/trackpad scrolling
   // (overlay.js). Hiding the page's scrollbar instead would shift its layout.
+  // Pinch zoom magnifies the page, fixed elements included. Keep the frame at 1:1 over
+  // whatever part of the page is on screen: sized up by the zoom, then scaled back down.
+  const vv = window.visualViewport;
+  const fit = () => {
+    const s = vv?.scale || 1;
+    if (Math.abs(s - 1) < 0.001) {
+      f.style.left = f.style.top = "0";
+      f.style.removeProperty("transform");
+      f.style.width = "100vw";
+      f.style.height = "100vh";
+      return;
+    }
+    f.style.left = `${vv.offsetLeft}px`;
+    f.style.top = `${vv.offsetTop}px`;
+    f.style.width = `${vv.width * s}px`;
+    f.style.height = `${vv.height * s}px`;
+    f.style.transformOrigin = "0 0";
+    f.style.transform = `scale(${1 / s})`;
+  };
   const close = () => {
     removeEventListener("message", onMessage);
     removeEventListener("keydown", onKey, true);
+    vv?.removeEventListener("resize", fit);
+    vv?.removeEventListener("scroll", fit);
     f.remove();
   };
   const onMessage = e => { if (e.source === f.contentWindow && e.data === "arctab:close") close(); };
@@ -30,6 +51,9 @@ function toggleOverlay(src) {
   const onKey = e => { if (e.key === "Escape" && document.getElementById(id) === f) { e.preventDefault(); e.stopPropagation(); close(); } };
   addEventListener("message", onMessage);
   addEventListener("keydown", onKey, true);
+  vv?.addEventListener("resize", fit);
+  vv?.addEventListener("scroll", fit);
+  fit();
   f.addEventListener("load", () => f.focus());
   document.documentElement.append(f);
 }
@@ -86,7 +110,7 @@ chrome.commands.onCommand.addListener(async command => {
     return;
   }
   try {
-    const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: toggleOverlay, args: [OVERLAY_URL] });
+    const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: toggleOverlay, args: [OVERLAY_URL, await chrome.tabs.getZoom(tab.id).catch(() => 1)] });
     if (res?.result === "was-open") newTab();
   } catch {
     newTab(); // can't draw on this page

@@ -7,6 +7,12 @@ const ARCTAB_OVERLAY = true;
 // Always the light look, whatever the system setting (tuned to read on any page); in an
 // incognito window, the incognito look. (shared.js isn't loaded yet, so check directly.)
 document.documentElement.dataset.theme = chrome.extension?.inIncognitoContext ? "private" : "light";
+// Page zoom (⌘+ / ⌘−) zooms this frame along with the page; undo it so the bar stays its
+// normal size. (Pinch zoom is undone by the frame itself; see toggleOverlay.)
+{
+  const z = Number(new URLSearchParams(location.search).get("zoom"));
+  if (z > 0 && Math.abs(z - 1) > 0.001) document.documentElement.style.zoom = String(1 / z);
+}
 const REOPENING = false; // the new tab page's focus hand-off doesn't apply here
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...children) => {

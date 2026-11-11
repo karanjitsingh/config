@@ -503,7 +503,7 @@
   }
 
   function render(q) {
-    if (!rows.length || document.activeElement !== input) { box.classList.add("hidden"); box.replaceChildren(); return; }
+    if (!rows.length) { box.classList.add("hidden"); box.replaceChildren(); return; }
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     box.replaceChildren(...rows.map((r, i) => rowNode(r, i, terms)));
     box.classList.remove("hidden");
@@ -786,7 +786,8 @@
     }
   });
 
-  input.addEventListener("blur", () => box.classList.add("hidden"));
+  // No hiding on blur: clicking elsewhere (or switching apps) keeps what you typed and its
+  // results up. Closing the bar hides them (closeBar).
 
   // ---------- command bar open/close ----------
 
