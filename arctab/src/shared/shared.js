@@ -61,8 +61,13 @@ async function ensureLayout() {
 // Serialized so two tabs opening at once can't both migrate.
 const loadLayout = () => navigator.locks.request("home-layout", ensureLayout);
 
-const favicon = (url, size) =>
-  `/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${size}`;
+// Another extension's page: Chrome has no favicon for it, so use that extension's own icon
+// (needs the "management" permission; Chrome serves a puzzle piece if it has none).
+const favicon = (url, size) => {
+  const ext = /^chrome-extension:\/\/([a-p]{32})\//.exec(url || "")?.[1];
+  if (ext && ext !== chrome.runtime.id) return `chrome://extension-icon/${ext}/${size >= 48 ? 128 : size > 16 ? 32 : 16}/1`;
+  return `/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${size}`;
+};
 
 // Custom icons live in the bookmark title itself: "🚀 Taskei" → { emoji: "🚀", name: "Taskei" }.
 const EMOJI_RE = /^(\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic}\uFE0F?)*)/u;
@@ -115,4 +120,36 @@ function normalizeUrl(u) {
   u = u.trim();
   if (!u) return u;
   return /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : `https://${u}`;
+}
+
+// Another extension's page can only be opened in a new tab: Chrome blocks loading it into
+// an existing one (ERR_BLOCKED_BY_CLIENT), even through chrome.tabs.update.
+const isOtherExtPage = url => /^chrome-extension:\/\/([a-p]{32})\//.exec(url || "")?.[1] !== chrome.runtime.id && /^chrome-extension:/.test(url || "");
+// Open in this tab, or right next to it when it has to be a new one.
+async function openHere(url) {
+  const cur = await chrome.tabs.getCurrent();
+  if (!cur) return chrome.tabs.create({ url });
+  if (isOtherExtPage(url)) return chrome.tabs.create({ url, index: cur.index + 1, windowId: cur.windowId });
+  return chrome.tabs.update(cur.id, { url });
+}
+
+// Links a page can't follow itself: other extensions' pages (chrome-extension://<id>/…),
+// chrome:// pages and file://. Chrome blocks those navigations from a page, so a favorite
+// or bookmark pointing at one did nothing; open them through the tabs API instead.
+// Click opens here, ⌘/Ctrl or middle click in a background tab, Shift in a new tab.
+// Runs after other handlers (bubble phase), so anything that opens links its own way wins.
+{
+  const webLink = u => /^(https?|mailto|tel|javascript|data|blob):/i.test(u) || u.startsWith(location.origin + "/");
+  const open = e => {
+    if (e.defaultPrevented || (e.type === "click" ? e.button !== 0 : e.button !== 1)) return;
+    const a = e.target.closest?.("a[href]");
+    if (!a || webLink(a.href) || !chrome.tabs) return;
+    e.preventDefault();
+    const url = a.href;
+    if (e.button === 1 || e.metaKey || e.ctrlKey) return chrome.tabs.create({ url, active: false });
+    if (e.shiftKey) return chrome.tabs.create({ url });
+    openHere(url);
+  };
+  document.addEventListener("click", open);
+  document.addEventListener("auxclick", open);
 }

@@ -11,8 +11,10 @@
     "activeTab",
     "history",
     "tabs",
+    "management",
     "search",
     "scripting",
+    "userScripts",
     "declarativeNetRequestWithHostAccess",
     "declarativeNetRequestFeedback",
     "offscreen"

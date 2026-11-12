@@ -1180,7 +1180,7 @@ body.search-only .fav-strip:not(:empty), body.overlay .fav-strip:not(:empty) {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: 2px 10px; /* rows sit close; the tiles' own padding spaces them */
   max-width: min(780px, calc(100vw - 48px));
   margin-top: 16px;
   /* No animation here: an animating parent's opacity cuts the tiles' backdrop blur off
@@ -1414,3 +1414,13 @@ body.private {
 }
 body.private.search-only #cmd-backdrop { background: #202124; }
 body.private #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .05); }
+
+/* Settings → Peek → Userscripts */
+.us-add { display: flex; gap: 8px; margin-top: 10px; }
+.us-add input[type=url] { flex: 1; min-width: 0; }
+#settings .us-add input[type=url] { display: block; width: auto; margin: 0; }
+.us-file { cursor: pointer; }
+.us-msg:empty { display: none; }
+.us-msg { margin-top: 8px; }
+.us-empty { padding: 10px 12px; }
+#settings .set-row .us-x { margin-right: 10px; padding: 3px 10px; font-size: 12px; }

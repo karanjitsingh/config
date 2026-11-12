@@ -135,6 +135,7 @@ $("#open-settings").addEventListener("click", () => {
   $("#set-ovupdates").checked = localStorage.overlayUpdates !== "off";
   chrome.storage.local.get("ctrlTOverlay").then(({ ctrlTOverlay }) => { $("#set-overlay").checked = ctrlTOverlay !== false; });
   fillPeekKinds();
+  fillUserScripts();
   settingsDlg.showModal();
   document.activeElement?.blur(); // no focus ring on the first item when opened with the mouse
 });
@@ -210,6 +211,45 @@ function fillPeekKinds() {
     return el("label", { className: "set-row" }, el("span", { className: "set-text" }, el("b", { textContent: name })), box);
   }));
 }
+
+// ---------- userscripts in peeks (src/peek/userscripts.js does the work) ----------
+const usMsg = t => { $("#us-msg").textContent = t || ""; };
+const usAsk = msg => chrome.runtime.sendMessage(msg).catch(e => ({ error: e.message }));
+async function fillUserScripts() {
+  const { available } = (await usAsk({ type: "us:status" })) || {};
+  $("#us-off").hidden = !!available;
+  const { peekUserScripts: list = [] } = await chrome.storage.local.get("peekUserScripts");
+  const save = next => chrome.storage.local.set({ peekUserScripts: next }).then(fillUserScripts);
+  const where = s => [...(s.meta.match || []), ...(s.meta.include || [])].slice(0, 2).join(", ") || "every site";
+  $("#us-list").replaceChildren(...(list.length ? list.map(s => {
+    const box = el("input", { type: "checkbox", className: "switch", checked: s.enabled });
+    box.addEventListener("change", () => save(list.map(x => (x.id === s.id ? { ...x, enabled: box.checked } : x))));
+    const x = el("button", { type: "button", className: "set-btn us-x", textContent: "Remove", title: "Remove this script from ArcTab (Tampermonkey keeps its copy)" });
+    x.addEventListener("click", e => { e.preventDefault(); save(list.filter(y => y.id !== s.id)); });
+    const sub = [s.meta.version?.[0] && `v${s.meta.version[0]}`, where(s), s.url ? `from ${s.url.replace(/^file:\/\/.*\//, "file ")}` : "added as a file", s.error && `couldn't re-read: ${s.error}`].filter(Boolean).join(" · ");
+    return el("label", { className: "set-row" },
+      el("span", { className: "set-text" }, el("b", { textContent: s.name }), el("span", { className: "hint", textContent: sub })),
+      x, box);
+  }) : [el("div", { className: "hint us-empty", textContent: "No userscripts yet. Add the .user.js you have in Tampermonkey (Tampermonkey → the script → File → Export, or its source file / URL)." })]));
+}
+async function addUserScript(msg) {
+  usMsg("Adding…");
+  const r = await usAsk({ type: "us:add", ...msg });
+  usMsg(r?.error ? `Couldn't add it: ${r.error}` : `Added “${r.name}”. Reopen the peek to run it.`);
+  fillUserScripts();
+}
+$("#us-add-url").addEventListener("click", () => {
+  const url = $("#us-url").value.trim();
+  if (!/^(https?|file):\/\//.test(url)) return usMsg("Enter an https:// or file:// address of a .user.js");
+  if (url.startsWith("file:")) usMsg("Reading a file:// address needs “Allow access to file URLs” for ArcTab in chrome://extensions.");
+  addUserScript({ url }).then(() => { $("#us-url").value = ""; });
+});
+$("#us-file").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (f) addUserScript({ source: await f.text() });
+});
+$("#us-enable").addEventListener("click", () => chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }));
 
 $("#sc-add").addEventListener("click", () => { editing = ""; renderShortcuts(); scList.scrollTop = 0; });
 

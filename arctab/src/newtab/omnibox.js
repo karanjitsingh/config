@@ -102,6 +102,29 @@
     ["Net internals", "chrome://net-internals", "dns network"],
   ].map(([title, url, words]) => ({ title, url, words }));
 
+  // ---------- other extensions ----------
+  // Each installed extension is a row: its options page if it has one, plus its entry in
+  // chrome://extensions. Pages of theirs you've visited or bookmarked (an extension's own
+  // dashboard, say) come from history and bookmarks like any page; they match on the
+  // extension's name too, and show it instead of the raw chrome-extension://<id>.
+  const extNames = new Map(); // id -> name
+  let EXT_PAGES = [];
+  const extId = u => /^chrome-extension:\/\/([a-p]{32})\//.exec(u || "")?.[1];
+  const extName = u => extNames.get(extId(u)) || "";
+  const shown = u => { const n = extName(u); return n ? `${n}${u.replace(/^chrome-extension:\/\/[a-p]{32}/, "")}` : display(u); };
+  async function loadExtensions() {
+    const all = await chrome.management?.getAll().catch(() => []) || [];
+    EXT_PAGES = [];
+    for (const x of all) {
+      if (x.id === chrome.runtime.id || x.type !== "extension") continue;
+      extNames.set(x.id, x.name);
+      const icon = x.icons?.length ? x.icons.reduce((a, b) => (Math.abs(b.size - 32) < Math.abs(a.size - 32) ? b : a)).url : null;
+      const words = `extension ${x.shortName || ""}`;
+      if (x.enabled && x.optionsUrl) EXT_PAGES.push({ title: x.name, url: x.optionsUrl, words: `${words} options settings`, icon, sub: "Extension options" });
+      EXT_PAGES.push({ title: `${x.name}${x.enabled ? "" : " (off)"}`, url: `chrome://extensions/?id=${x.id}`, words: `${words} manage details permissions`, icon, sub: "Extension" });
+    }
+  }
+
   // ---------- ranking ----------
 
   // How well all terms match. Host prefix > host-part prefix > title word > URL word > substring.
@@ -155,6 +178,43 @@
     return (Math.log2(1 + h.visitCount) + 2 * Math.log2(1 + (h.typedCount || 0))) * (0.3 + 1 / (1 + days / 7));
   }
 
+  // ---------- learned picks ----------
+  // What you chose for what you typed, like Chrome's omnibox shortcuts (and Firefox's
+  // adaptive history): { q, url, title, n, t }. Typing the start of something you typed
+  // before ranks what you picked then near the top. The more often and recently you
+  // picked it, and the more of that text you've typed, the bigger the boost. Picks fade
+  // with a two-week half-life, so a habit you've dropped stops winning. Kept in this
+  // extension's localStorage (the homepage and Ctrl+T share it), never in incognito.
+  const PICKS_KEY = "arctabPicks", PICKS_MAX = 400, PICK_HALF_LIFE = 14 * 864e5;
+  const fade = t => 0.5 ** ((Date.now() - t) / PICK_HALF_LIFE);
+  let picks = [];
+  const readPicks = () => { try { picks = JSON.parse(localStorage[PICKS_KEY] || "[]"); } catch { picks = []; } };
+  readPicks();
+  addEventListener("storage", e => { if (e.key === PICKS_KEY) readPicks(); }); // picked in another tab
+  function recordPick(q, r) {
+    q = q.trim().toLowerCase();
+    if (IN_INCOGNITO || !q || !r.url) return;
+    const k = norm(r.url);
+    const p = picks.find(x => x.q === q && norm(x.url) === k);
+    if (p) Object.assign(p, { n: p.n * fade(p.t) + 1, t: Date.now(), title: r.title || p.title });
+    else picks.push({ q, url: r.url, title: r.title || "", n: 1, t: Date.now() });
+    picks = picks.sort((a, b) => b.t - a.t).slice(0, PICKS_MAX);
+    try { localStorage[PICKS_KEY] = JSON.stringify(picks); } catch { /* full */ }
+  }
+  // url (normalized) -> { w, p }: how strongly past picks point at it for this query.
+  function pickWeights(q) {
+    const lq = q.trim().toLowerCase();
+    const out = new Map();
+    if (!lq) return out;
+    for (const p of picks) {
+      if (!p.q.startsWith(lq)) continue;
+      const k = norm(p.url);
+      const w = p.n * fade(p.t) * (lq.length / p.q.length);
+      out.set(k, { w: (out.get(k)?.w || 0) + w, p });
+    }
+    return out;
+  }
+
   // Same destination, unless they're two different open tabs of it.
   const sameRow = (a, b) => a.url && b.url && norm(a.url) === norm(b.url) && !(a.tab && b.tab && a.tab.id !== b.tab.id);
 
@@ -162,19 +222,27 @@
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const out = new Map();
     for (const h of history) {
-      const m = matchScore(terms, h.title || "", h.url);
-      if (m) out.set(norm(h.url), { kind: "history", url: h.url, title: h.title || display(h.url), m, h });
+      const m = matchScore(terms, `${h.title || ""} ${extName(h.url)}`, h.url);
+      if (m) out.set(norm(h.url), { kind: "history", url: h.url, title: h.title || shown(h.url), m, h });
     }
     for (const [k, b] of bookmarks) {
-      const m = matchScore(terms, b.title, b.url);
+      const m = matchScore(terms, `${b.title} ${extName(b.url)}`, b.url);
       if (!m) continue;
       const ex = out.get(k);
       if (ex) Object.assign(ex, { kind: "bookmark", title: b.title || ex.title, m: Math.max(ex.m, m) });
-      else out.set(k, { kind: "bookmark", url: b.url, title: b.title || display(b.url), m, h: histByUrl.get(k) });
+      else out.set(k, { kind: "bookmark", url: b.url, title: b.title || shown(b.url), m, h: histByUrl.get(k) });
     }
     for (const p of CHROME_PAGES) {
       const m = Math.max(matchScore(terms, p.title, p.url), matchScore(terms, `${p.title} ${p.words}`, "") * 0.8);
       if (m && !out.has(norm(p.url))) out.set(norm(p.url), { kind: "chrome", url: p.url, title: p.title, m, h: histByUrl.get(norm(p.url)) });
+    }
+    for (const p of EXT_PAGES) {
+      const m = Math.max(matchScore(terms, p.title, ""), matchScore(terms, `${p.title} ${p.words}`, "") * 0.8);
+      const k = norm(p.url);
+      if (!m) continue;
+      const ex = out.get(k);
+      if (ex) Object.assign(ex, { icon: p.icon, m: Math.max(ex.m, m) });
+      else out.set(k, { kind: "ext", url: p.url, title: p.title, sub: p.sub, icon: p.icon, m, h: histByUrl.get(k) });
     }
     for (const [k, tabs] of tabsByUrl) {
       // The first copy rides on the history/bookmark row; any others get a row each.
@@ -185,12 +253,21 @@
         if (m) out.set(i ? `${k}#${tab.id}` : k, { kind: "tab", url: tab.url, title: tab.title || display(tab.url), m, tab, h: histByUrl.get(k) });
       });
     }
+    // Past picks for this text that don't match it on their own still come along.
+    const learned = pickWeights(q);
+    for (const [k, { w, p }] of learned) {
+      if (w >= 0.5 && !out.has(k)) out.set(k, { kind: bookmarks.has(k) ? "bookmark" : "history", url: p.url, title: p.title || shown(p.url), m: 10, h: histByUrl.get(k), tab: tabsByUrl.get(k)?.[0] });
+    }
     const list = [...out.values()];
     for (const c of list) {
       // Open tabs rank high (like Arc): you most likely want the one you already have.
       c.score = c.m * (1 + Math.max(frecency(c.h), c.tab ? 3 : 0))
-        * (c.tab ? 2.5 : c.kind === "bookmark" ? 1.5 : c.kind === "chrome" ? 2.5 : 1)
+        * (c.tab ? 2.5 : c.kind === "bookmark" ? 1.5 : c.kind === "chrome" || c.kind === "ext" ? 2.5 : 1)
         + (c.kind === "bookmark" ? 20 : 0) + (c.tab ? 40 : 0);
+      // What you picked before for this text: one recent pick about doubles the score,
+      // a habit (3+) about quadruples it plus a flat lift, so it lands on top.
+      const w = Math.min(3, learned.get(norm(c.url))?.w || 0);
+      if (w) c.score = c.score * (1 + w) + 300 * w;
     }
     return list.sort((a, b) => b.score - a.score);
   }
@@ -472,13 +549,14 @@
   function rowNode(r, i, terms) {
     const n = el("div", { className: "sug" + (i === sel ? " sel" : ""), role: "option" });
     const isChrome = r.url?.startsWith("chrome://");
-    const iconSrc = r.past || isChrome ? null : r.iconUrl || r.url;
-    const ico = iconSrc ? el("img", { src: favicon(iconSrc, 32), alt: "", width: 16, height: 16 }) : el("span", { className: "sug-ico" });
+    const iconSrc = r.past || (isChrome && !r.icon) ? null : r.iconUrl || r.url;
+    const ico = r.icon ? el("img", { src: r.icon, alt: "", width: 16, height: 16 })
+      : iconSrc ? el("img", { src: favicon(iconSrc, 32), alt: "", width: 16, height: 16 }) : el("span", { className: "sug-ico" });
     if (!iconSrc) ico.innerHTML = r.svg || (r.past ? CLOCK_ICON : isChrome ? chromeIcon(r.url) : SEARCH_ICON);
     const text = el("span", { className: "sug-text" }, el("span", { className: "sug-title" }, highlight(r.title, terms)));
-    if (r.kind === "live") { if (r.sub) text.append(el("span", { className: "sug-sub" }, ` – ${r.sub}`)); }
-    else if (r.url && r.kind !== "url") text.append(el("span", { className: "sug-sub" }, " – ", highlight(display(r.url), terms)));
-    else if (r.url && r.title !== display(r.url)) text.append(el("span", { className: "sug-sub" }, " – ", display(r.url)));
+    if (r.kind === "live" || r.kind === "ext") { if (r.sub) text.append(el("span", { className: "sug-sub" }, ` – ${r.sub}`)); }
+    else if (r.url && r.kind !== "url" && r.title !== shown(r.url)) text.append(el("span", { className: "sug-sub" }, " – ", highlight(shown(r.url), terms)));
+    else if (r.url && r.title !== display(r.url)) text.append(el("span", { className: "sug-sub" }, " – ", shown(r.url)));
     else if (r.sub) text.append(el("span", { className: "sug-sub" }, ` – ${r.sub}`));
     n.append(ico, text);
     if (r.kind === "bookmark") n.append(el("span", { className: "sug-mark", textContent: "★", title: "Bookmarked" }));
@@ -520,8 +598,8 @@
     // In the window this bar is in (an incognito window stays incognito).
     if (OVERLAY) { await chrome.tabs.create({ url, windowId: (await chrome.windows.getCurrent()).id }); return closeOverlay(); }
     if (newTab) return chrome.tabs.create({ url });
-    const cur = await chrome.tabs.getCurrent();
-    chrome.tabs.update(cur.id, { url });
+    if (isOtherExtPage(url)) { stopNavigating(); resetBar(); if (!searchOnly()) closeBar(); } // opens beside this tab
+    return openHere(url);
   }
 
   // The homepage tab stays open: closing it would put it on Chrome's recently-closed
@@ -574,6 +652,7 @@
   // incog: open it in an incognito window (Shift+Enter, or the bar's incognito switch).
   function activate(r, newTab, incog = incognito) {
     if (!r) return;
+    if (!keyword && !incog && r.url && !["home", "keyhint", "info", "live"].includes(r.kind)) recordPick(typed, r);
     if (incog && !["home", "keyhint", "info"].includes(r.kind)) return openPrivately(r);
     // Anything already open in another tab switches to it (like Arc); ⌘Enter opens a copy.
     if (r.tab && !newTab) return switchTo(r.tab);
@@ -873,7 +952,7 @@
 
   // Load suggestion data after the first frame so it never delays the page appearing.
   const later = window.requestIdleCallback || (f => setTimeout(f, 1));
-  if (!IN_INCOGNITO) later(() => { loadBookmarks(); loadHistory(); }, { timeout: 300 }); // incognito: nothing of yours
+  if (!IN_INCOGNITO) later(() => { loadBookmarks(); loadHistory(); loadExtensions(); }, { timeout: 300 }); // incognito: nothing of yours
   if (searchOnly() || OVERLAY) openBar({ clear: true });
   // The page hands focus to the overlay frame itself; pass it on to the input.
   if (OVERLAY) addEventListener("focus", () => { if (document.activeElement !== input) input.focus(); });

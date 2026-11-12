@@ -141,6 +141,8 @@ chrome.runtime.onStartup.addListener(ensurePeekKeys);
 chrome.permissions.onAdded.addListener(ensurePeekKeys);
 ensurePeekKeys();
 
+importScripts("peek/userscripts.js"); // userscripts in peeks (Tampermonkey can't reach them)
+
 try { importScripts("../local/background.local.js"); } catch { /* no private handlers installed */ }
 
 // TEMP diagnostics for peek framing (unpacked extensions only): log every rule match.
