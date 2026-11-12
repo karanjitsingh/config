@@ -216,3 +216,12 @@ else if (!bm) showError("The extension doesn't have bookmarks permission yet. Op
 else if (IN_INCOGNITO) { document.body.classList.add("search-only", "private"); markReady(); }
 else if (localStorage.newTabMode === "search") { document.body.classList.add("search-only"); markReady(); searchFavs(); }
 else showHome();
+
+// Scrollbar space only when there's something to scroll (see html.scrolls in style.css).
+// Checked again whenever the page's size changes (widgets loading, cards collapsing).
+{
+  const root = document.documentElement;
+  const fit = () => root.classList.toggle("scrolls", root.scrollHeight > root.clientHeight + 1);
+  new ResizeObserver(fit).observe(document.body);
+  addEventListener("resize", fit);
+}

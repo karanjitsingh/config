@@ -22,9 +22,12 @@
 }
 
 * { box-sizing: border-box; }
-/* Reserve scrollbar space on both sides so centered content doesn't jump when
-   filtering/collapsing makes the page short enough for the scrollbar to vanish. */
-html { scrollbar-gutter: stable both-edges; }
+/* Only while the page scrolls (.scrolls, set by page.js): reserve scrollbar space on both
+   sides so centered content stays centered. Reserved on a page that doesn't scroll, the
+   empty space showed as a plain strip down the edge. */
+html.scrolls { scrollbar-gutter: stable both-edges; }
+/* No light track of its own; just the thumb on the page color. */
+html { scrollbar-color: color-mix(in srgb, var(--text) 25%, transparent) transparent; }
 /* Hidden until app.js has content to show (snapshot or real render), so the first
    painted frame is the complete page. The background still paints meanwhile. */
 html:not(.ready) main { visibility: hidden; }
@@ -926,6 +929,8 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 }
 .tix-sev { flex: none; font-variant-numeric: tabular-nums; }
 .tix-sev.hi { color: #d64545; font-weight: 600; }
+.tix-who { flex: none; max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tix-who.none { font-style: italic; opacity: .75; }
 .tix-open .cr-ico { color: var(--accent); }
 .tix-pending .cr-ico, .tix-pending .cr-status { color: #c98a0b; }
 .tix-done .cr-ico, .tix-done .cr-status { color: #2f8f46; }
@@ -1235,6 +1240,12 @@ body:not(.overlay) {
     radial-gradient(700px 420px at 100% 0, color-mix(in srgb, #ff9f6e 7%, transparent), transparent 70%),
     var(--bg);
   background-attachment: fixed;
+  /* A fixed background is laid out over the viewport minus the scrollbar gutters html
+     reserves (both edges), and would repeat into them as plain strips. Don't repeat, and
+     reach past the gutters instead. */
+  background-repeat: no-repeat;
+  background-size: calc(100% + 48px) 100%;
+  background-position: -24px 0;
 }
 
 #clock {
