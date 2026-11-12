@@ -690,7 +690,14 @@
   // Click it or press ⌥⌘N (Chrome keeps ⌘⇧N for itself). Lasts until the bar resets.
 
   const incogBtn = document.getElementById("incog");
-  if (IN_INCOGNITO && incogBtn) incogBtn.hidden = true; // already incognito
+  // Already incognito: the switch becomes a quiet incognito glyph in the bar, just for looks.
+  if (IN_INCOGNITO && incogBtn) {
+    incogBtn.classList.add("badge");
+    incogBtn.disabled = true;
+    incogBtn.tabIndex = -1;
+    incogBtn.title = "Incognito window";
+    incogBtn.setAttribute("aria-hidden", "true");
+  }
   function setIncognito(on) {
     incognito = on;
     cmd.classList.toggle("incognito", on);
@@ -855,7 +862,7 @@
       mark();
     } else if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === "KeyN") {
       e.preventDefault();
-      setIncognito(!incognito);
+      if (!IN_INCOGNITO) setIncognito(!incognito); // an incognito window is incognito already
     } else if (k === "Tab" && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey) {
       if (stepHome(e.shiftKey ? -1 : 1)) e.preventDefault();
     } else if (k === "Enter" && !typed && !keyword && homePicked()) {

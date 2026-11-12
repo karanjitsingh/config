@@ -167,6 +167,9 @@ body.navigating .cmd-ico { color: var(--accent); }
 /* No button at rest: it only shows (as an "Incognito" tag) while ⌥⌘N has it on. */
 #cmd:not(.incognito) #incog, #incog[hidden] { display: none !important; }
 #incog:hover { color: var(--text); background: var(--hover); }
+/* In an incognito window: just the glyph, always there, not a button. */
+#cmd:not(.incognito) #incog.badge { display: inline-flex !important; }
+#incog.badge { cursor: default; pointer-events: none; color: var(--muted); background: transparent; }
 #cmd.incognito {
   --card: #1e1e23; --text: #f2f2f5; --muted: #9a9aa3; --border: #34343c;
   --hover: #2c2c33; --sel: #33333d; --accent: #a5b0ff;
