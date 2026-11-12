@@ -1416,11 +1416,14 @@ body.private.search-only #cmd-backdrop { background: #202124; }
 body.private #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .05); }
 
 /* Settings → Peek → Userscripts */
-.us-add { display: flex; gap: 8px; margin-top: 10px; }
-.us-add input[type=url] { flex: 1; min-width: 0; }
-#settings .us-add input[type=url] { display: block; width: auto; margin: 0; }
-.us-file { cursor: pointer; }
+#settings .us-file-input { display: none; }
+#settings .us-add { gap: 8px; padding: 10px 12px; }
+#settings .us-add input[type=url] { flex: 1; min-width: 0; width: auto; margin: 0; padding: 7px 10px; font-size: 13px; background: var(--card); }
+#us-list:not(:empty) + .us-add { border-top: 1px solid var(--border); }
+#settings #us-list .set-text { flex: 1; }
+#settings .set-row .us-x { padding: 4px 10px; font-size: 12px; font-weight: 400; color: var(--muted); }
+#settings .set-row .us-x:hover { color: #d64545; border-color: #d64545; }
+.us-msg { margin: 8px 2px 0; }
 .us-msg:empty { display: none; }
-.us-msg { margin-top: 8px; }
-.us-empty { padding: 10px 12px; }
-#settings .set-row .us-x { margin-right: 10px; padding: 3px 10px; font-size: 12px; }
+#settings #us-off[hidden] { display: none; }
+#settings #us-off { margin-bottom: 10px; }

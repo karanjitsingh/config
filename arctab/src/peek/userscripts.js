@@ -131,6 +131,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   (async () => {
     const { [US_KEY]: list = [] } = await chrome.storage.local.get(US_KEY);
     if (msg.type === "us:status") return { available: usAvailable() };
+    if (msg.type === "us:sync") { await usSync(); return { ok: true }; }
     if (msg.type === "us:add") {
       let source = msg.source;
       if (!source) {

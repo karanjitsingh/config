@@ -221,16 +221,16 @@ async function fillUserScripts() {
   const { peekUserScripts: list = [] } = await chrome.storage.local.get("peekUserScripts");
   const save = next => chrome.storage.local.set({ peekUserScripts: next }).then(fillUserScripts);
   const where = s => [...(s.meta.match || []), ...(s.meta.include || [])].slice(0, 2).join(", ") || "every site";
-  $("#us-list").replaceChildren(...(list.length ? list.map(s => {
-    const box = el("input", { type: "checkbox", className: "switch", checked: s.enabled });
+  $("#us-list").replaceChildren(...list.map(s => {
+    const box = el("input", { type: "checkbox", className: "switch", checked: s.enabled, title: s.enabled ? "On in peeks" : "Off" });
     box.addEventListener("change", () => save(list.map(x => (x.id === s.id ? { ...x, enabled: box.checked } : x))));
-    const x = el("button", { type: "button", className: "set-btn us-x", textContent: "Remove", title: "Remove this script from ArcTab (Tampermonkey keeps its copy)" });
+    const x = el("button", { type: "button", className: "set-btn us-x", textContent: "Remove", title: "Remove from ArcTab (Tampermonkey keeps its copy)" });
     x.addEventListener("click", e => { e.preventDefault(); save(list.filter(y => y.id !== s.id)); });
-    const sub = [s.meta.version?.[0] && `v${s.meta.version[0]}`, where(s), s.url ? `from ${s.url.replace(/^file:\/\/.*\//, "file ")}` : "added as a file", s.error && `couldn't re-read: ${s.error}`].filter(Boolean).join(" · ");
+    const sub = [where(s), s.url ? (s.url.startsWith("file:") ? `file ${s.url.split("/").pop()}` : s.url) : "added as a file", s.error && `couldn't re-read: ${s.error}`].filter(Boolean).join(" · ");
     return el("label", { className: "set-row" },
-      el("span", { className: "set-text" }, el("b", { textContent: s.name }), el("span", { className: "hint", textContent: sub })),
+      el("span", { className: "set-text" }, el("b", { textContent: s.meta.version?.[0] ? `${s.name} ${s.meta.version[0]}` : s.name }), el("span", { className: "hint", textContent: sub })),
       x, box);
-  }) : [el("div", { className: "hint us-empty", textContent: "No userscripts yet. Add the .user.js you have in Tampermonkey (Tampermonkey → the script → File → Export, or its source file / URL)." })]));
+  }));
 }
 async function addUserScript(msg) {
   usMsg("Adding…");
@@ -249,7 +249,11 @@ $("#us-file").addEventListener("change", async e => {
   e.target.value = "";
   if (f) addUserScript({ source: await f.text() });
 });
+$("#us-pick").addEventListener("click", () => $("#us-file").click());
+$("#us-url").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("#us-add-url").click(); } });
 $("#us-enable").addEventListener("click", () => chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }));
+// Back from the Details page with the switch on: show it (and get the scripts registered).
+addEventListener("focus", () => { if (settingsDlg.open) chrome.runtime.sendMessage({ type: "us:sync" }).catch(() => {}).then(fillUserScripts); });
 
 $("#sc-add").addEventListener("click", () => { editing = ""; renderShortcuts(); scList.scrollTop = 0; });
 

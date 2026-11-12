@@ -130,13 +130,22 @@
           <p class="set-lede">Open links in an overlay on the homepage, like Arc. <kbd>Esc</kbd> or clicking outside closes it, <kbd>⌘O</kbd> expands it into this tab, and <kbd>⌘</kbd>-click always opens a new tab.</p>
           <div id="peek-kinds" class="set-group"></div>
           <h3 class="set-sub">Userscripts</h3>
-          <p class="set-lede">Tampermonkey can't run inside a peek (Chrome keeps every extension out of frames on another extension's page), so ArcTab runs these there itself. Normal tabs are still Tampermonkey's.</p>
-          <p class="set-lede us-off" id="us-off" hidden>Turn on <b>Allow User Scripts</b> for ArcTab first: <button type="button" id="us-enable" class="set-btn">Open ArcTab's details</button> then come back here.</p>
-          <div class="set-group set-list"><div id="us-list"></div></div>
-          <div class="us-add">
-            <input id="us-url" type="url" placeholder="https://…/script.user.js or file:///…/script.user.js" spellcheck="false">
-            <button type="button" id="us-add-url" class="set-btn">Add from URL</button>
-            <label class="set-btn us-file">Add .user.js file<input id="us-file" type="file" accept=".js,text/javascript" hidden></label>
+          <p class="set-lede">Tampermonkey can't reach inside a peek, so ArcTab runs your userscripts there itself. Normal tabs stay Tampermonkey's.</p>
+          <div class="set-group" id="us-off" hidden>
+            <div class="set-row">
+              <span class="set-text"><b>Allow User Scripts is off</b>
+                <span class="hint">Chrome has you switch this on once, in ArcTab's Details page. This updates when you come back.</span></span>
+              <button type="button" id="us-enable" class="set-btn primary">Open Details</button>
+            </div>
+          </div>
+          <div class="set-group">
+            <div id="us-list"></div>
+            <div class="set-row us-add">
+              <input id="us-url" type="url" placeholder="Script address: https://… or file:///…/name.user.js" spellcheck="false">
+              <button type="button" id="us-add-url" class="set-btn">Add</button>
+              <button type="button" id="us-pick" class="set-btn">Choose file…</button>
+              <input id="us-file" type="file" accept=".js,text/javascript" class="us-file-input">
+            </div>
           </div>
           <p class="hint us-msg" id="us-msg"></p>
         </section>
