@@ -40,7 +40,8 @@ body.overlay #cmd-backdrop { backdrop-filter: blur(4px); }
   text-shadow: 0 1px 2px rgba(0, 0, 0, .45); /* tight: a wide glow showed as a dark smudge on light pages */
 }
 :root[data-theme="light"] .fav-strip .fav:hover,
-:root[data-theme="light"] .fav-strip .fav:focus-visible { background: rgba(255, 255, 255, .14); border-color: transparent; box-shadow: none; }
+:root[data-theme="light"] .fav-strip .fav:focus-visible,
+:root[data-theme="light"] .fav-strip .fav.sel { background: rgba(255, 255, 255, .14); border-color: transparent; box-shadow: none; }
 :root[data-theme="light"] .fav-strip .fav > img,
 :root[data-theme="light"] .fav-strip .fav > .emoji,
 :root[data-theme="light"] .fav-strip .fav > .letter {
@@ -60,10 +61,10 @@ body.overlay #cmd-backdrop { backdrop-filter: blur(4px); }
   margin: -5px -6px;
 }
 :root[data-theme="light"] .upd-sub { color: rgba(255, 255, 255, .88); text-shadow: 0 1px 2px rgba(0, 0, 0, .55), 0 0 5px rgba(0, 0, 0, .25); }
-:root[data-theme="light"] .upd:hover { background: rgba(255, 255, 255, .9); }
+:root[data-theme="light"] :is(.upd:hover, .upd.sel) { background: rgba(255, 255, 255, .9); }
 /* On hover the row turns into a solid white chip: dark text, no shadows. */
-:root[data-theme="light"] .upd:hover .upd-title { color: #1d1d1f; text-shadow: none; }
-:root[data-theme="light"] .upd:hover .upd-sub { color: rgba(29, 29, 31, .6); text-shadow: none; }
+:root[data-theme="light"] :is(.upd:hover, .upd.sel) .upd-title { color: #1d1d1f; text-shadow: none; }
+:root[data-theme="light"] :is(.upd:hover, .upd.sel) .upd-sub { color: rgba(29, 29, 31, .6); text-shadow: none; }
 :root[data-theme="light"] .upd-kind { color: #fff; background: rgba(91, 108, 255, .85); }
 :root[data-theme="light"] .upd-kind.is-ticket { color: #fff; background: rgba(217, 130, 43, .88); }
 .upd, .upd .upd-title, .upd .upd-sub { transition: background .14s ease, color .14s ease, text-shadow .14s ease; }

@@ -1325,7 +1325,7 @@ body.overlay .upd-list:not(:empty) {
   font-size: 13px;
   white-space: nowrap;
 }
-.upd:hover { background: color-mix(in srgb, var(--card) 55%, transparent); }
+.upd:hover, .upd.sel { background: color-mix(in srgb, var(--card) 55%, transparent); }
 /* What kind of update: a small fixed-width tag so titles line up. */
 .upd-kind {
   flex: none;
@@ -1356,7 +1356,7 @@ body.overlay .upd-list:not(:empty) {
   border-radius: 8px;
   cursor: pointer;
 }
-.upd-more:hover { color: var(--accent); }
+.upd-more:hover, .upd-more.sel { color: var(--accent); }
 /* Ctrl+T (or ⌘K) with a peek open: the search bar comes up over the peek. */
 body.peeking.cmd-open #cmd-backdrop { z-index: 50; }
 /* …and the peek blurs out behind it, like the homepage does. */
@@ -1390,7 +1390,7 @@ body.peeking.cmd-open .peek-backdrop { filter: blur(10px) saturate(.9); opacity:
   cursor: pointer;
   visibility: hidden;
 }
-.upd:hover .upd-read { visibility: visible; }
+.upd:hover .upd-read, .upd.sel .upd-read { visibility: visible; }
 .upd-read:hover { color: #1f9d55; background: rgba(31, 157, 85, .12); }
 .upd.leaving { opacity: 0; transform: translateX(8px); transition: opacity .18s, transform .18s; }
 /* Title and note share one line box so they sit on the same center line. */

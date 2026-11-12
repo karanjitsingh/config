@@ -42,6 +42,7 @@ function toggleOverlay(src, zoom) {
   const close = () => {
     removeEventListener("message", onMessage);
     removeEventListener("keydown", onKey, true);
+    removeEventListener("focusin", onFocusIn, true);
     vv?.removeEventListener("resize", fit);
     vv?.removeEventListener("scroll", fit);
     f.remove();
@@ -49,8 +50,13 @@ function toggleOverlay(src, zoom) {
   const onMessage = e => { if (e.source === f.contentWindow && e.data === "arctab:close") close(); };
   // If focus never made it into the frame, Esc lands on the page: close from here too.
   const onKey = e => { if (e.key === "Escape" && document.getElementById(id) === f) { e.preventDefault(); e.stopPropagation(); close(); } };
+  // The frame covers the whole page, so nothing there can be clicked: any focus landing on
+  // the page is the page's own script (a still-loading page autofocusing its search box,
+  // say). Take it back so typing keeps going to the bar.
+  const onFocusIn = e => { if (e.target !== f && document.getElementById(id) === f) f.focus(); };
   addEventListener("message", onMessage);
   addEventListener("keydown", onKey, true);
+  addEventListener("focusin", onFocusIn, true);
   vv?.addEventListener("resize", fit);
   vv?.addEventListener("scroll", fit);
   fit();

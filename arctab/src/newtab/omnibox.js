@@ -805,10 +805,25 @@
   const hasCompletionSelected = () =>
     completion && input.selectionStart === typed.length && input.selectionEnd === input.value.length && input.value !== typed;
 
+  // ---------- empty bar: Tab through the favorites and updates under it ----------
+  // Focus stays in the input (so typing still works); the picked one just gets .sel.
+  let homeSel = null;
+  const homeItems = () => [...document.querySelectorAll("#so-favs .fav, #ov-updates .upd, #ov-updates .upd-more")].filter(n => n.offsetParent);
+  function pickHome(n) { homeSel?.classList.remove("sel"); homeSel = n; n?.classList.add("sel"); n?.scrollIntoView({ block: "nearest" }); }
+  function stepHome(dir) {
+    const items = homeItems();
+    if (!items.length) return false;
+    const i = items.indexOf(homeSel);
+    pickHome(items[i < 0 ? (dir > 0 ? 0 : items.length - 1) : (i + dir + items.length) % items.length]);
+    return true;
+  }
+  const homePicked = () => homeSel?.isConnected && homeSel.offsetParent ? homeSel : null;
+
   // ---------- events ----------
 
   input.addEventListener("input", e => {
     typed = input.value;
+    pickHome(null);
     if (literalKey && !typed.startsWith(`${literalKey} `)) literalKey = null;
     if (!keyword && !literalKey) {
       const m = typed.match(/^(\S+)\s(.*)$/s); // "code " → pill
@@ -841,6 +856,16 @@
     } else if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === "KeyN") {
       e.preventDefault();
       setIncognito(!incognito);
+    } else if (k === "Tab" && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (stepHome(e.shiftKey ? -1 : 1)) e.preventDefault();
+    } else if (k === "Enter" && !typed && !keyword && homePicked()) {
+      e.preventDefault();
+      const n = homePicked();
+      pickHome(null);
+      n.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: e.metaKey, ctrlKey: e.ctrlKey || e.altKey, shiftKey: incognito || e.shiftKey }));
+    } else if (k === "Escape" && homePicked()) {
+      e.preventDefault();
+      pickHome(null);
     } else if (k === "Enter") {
       e.preventDefault();
       activate(rows[sel], e.metaKey || e.ctrlKey || e.altKey, incognito || e.shiftKey);
@@ -849,6 +874,9 @@
       if (!keyword && SEARCH[typed.trim()] && !/\s/.test(typed)) enterKeyword(typed.trim());
       else if (hasCompletionSelected()) acceptCompletion();
       else if (rows.length) { sel = (sel + 1) % rows.length; mark(); }
+    } else if (k === "Tab" && e.shiftKey && typed.trim()) {
+      e.preventDefault();
+      if (rows.length) { sel = (sel - 1 + rows.length) % rows.length; mark(); }
     } else if ((k === "ArrowRight" || k === "End") && hasCompletionSelected()) {
       acceptCompletion();
     } else if (k === "Escape") {
