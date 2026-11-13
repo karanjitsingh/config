@@ -89,15 +89,15 @@
             </label>
           </div>
           <h3 class="set-sub">Quick search</h3>
-          <p class="set-lede">The search bar <kbd>Ctrl</kbd>+<kbd>T</kbd> (or <kbd>⌘T</kbd> with the Karabiner mapping) opens over the page you're on. Press it again for a real new tab.</p>
+          <p class="set-lede">The search bar <kbd>Ctrl+T</kbd> (or <kbd>⌘T</kbd> with the Karabiner mapping) opens over the page you're on. Press it again for a real new tab.</p>
           <div class="set-group">
             <label class="set-row">
-              <span class="set-text"><b>Search over the current page with <kbd>Ctrl</kbd>+<kbd>T</kbd></b>
+              <span class="set-text"><b>Search over the current page with <kbd>Ctrl+T</kbd></b>
                 <span class="hint">Off: the shortcut opens a normal new tab instead. Change the key in chrome://extensions/shortcuts.</span></span>
               <input id="set-overlay" type="checkbox" class="switch">
             </label>
             <label class="set-row">
-              <span class="set-text"><b>Show favorites in the <kbd>Ctrl</kbd>+<kbd>T</kbd> search</b>
+              <span class="set-text"><b>Show favorites in the <kbd>Ctrl+T</kbd> search</b>
                 <span class="hint">Put your favorites under the search bar that opens over the current page.</span></span>
               <input id="set-ovfavs" type="checkbox" class="switch">
             </label>
@@ -107,7 +107,7 @@
               <input id="set-favdigits" type="checkbox" class="switch">
             </label>
             <label class="set-row">
-              <span class="set-text"><b>Show updates in the <kbd>Ctrl</kbd>+<kbd>T</kbd> search</b>
+              <span class="set-text"><b>Show updates in the <kbd>Ctrl+T</kbd> search</b>
                 <span class="hint">New activity from widgets like code reviews and ticket follow-ups, under your favorites. Opening one marks it seen.</span></span>
               <input id="set-ovupdates" type="checkbox" class="switch">
             </label>
@@ -123,6 +123,21 @@
             </label>
             </div>
           </div>
+          <h3 class="set-sub">Backup</h3>
+          <div class="set-group">
+            <div class="set-row">
+              <span class="set-text"><b>Export settings</b>
+                <span class="hint">Switches, search shortcuts, peek choices and userscripts. Not your layout or bookmarks.</span></span>
+              <button type="button" id="bk-export" class="set-btn">Export…</button>
+            </div>
+            <div class="set-row">
+              <span class="set-text"><b>Import settings</b>
+                <span class="hint">Replaces these settings with the ones in an exported file.</span></span>
+              <button type="button" id="bk-import" class="set-btn">Import…</button>
+              <input id="bk-file" type="file" accept=".json,application/json" class="us-file-input">
+            </div>
+          </div>
+          <p class="hint us-msg" id="bk-msg"></p>
         </section>
 
         <section class="set-pane" data-pane="peek">

@@ -264,6 +264,39 @@ $("#sc-reset").addEventListener("click", async () => {
   renderShortcuts();
 });
 
+// ---------- backup: export / import ----------
+// Only settings: not caches, learned search picks, or the layout (it holds bookmark IDs,
+// which differ per machine). Import sets just these keys and reloads.
+const BACKUP_LOCAL = ["focusPage", "newTabMode", "overlayFavs", "favDigits", "overlayUpdates", "localExtras", "peekKinds", "peekOffUrls",
+  ...(typeof LOCAL_EXTRAS !== "undefined" ? (LOCAL_EXTRAS.settings || []).map(o => o.key) : [])];
+const BACKUP_STORED = ["searchShortcuts", "ctrlTOverlay", "localExtras", "peekUserScripts"];
+const backupStored = k => BACKUP_STORED.includes(k) || k.startsWith("usValues:"); // userscripts' GM_setValue data
+const bkMsg = t => { $("#bk-msg").textContent = t; };
+
+$("#bk-export").addEventListener("click", async () => {
+  const local = Object.fromEntries(BACKUP_LOCAL.filter(k => localStorage.getItem(k) !== null).map(k => [k, localStorage.getItem(k)]));
+  const stored = Object.fromEntries(Object.entries(await chrome.storage.local.get(null)).filter(([k]) => backupStored(k)));
+  const blob = new Blob([JSON.stringify({ arctab: 1, exported: new Date().toISOString(), localStorage: local, storage: stored }, null, 2)], { type: "application/json" });
+  const a = el("a", { href: URL.createObjectURL(blob), download: `arctab-settings-${new Date().toISOString().slice(0, 10)}.json` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  bkMsg("");
+});
+
+$("#bk-import").addEventListener("click", () => $("#bk-file").click());
+$("#bk-file").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { return bkMsg("That file isn't valid JSON."); }
+  if (data?.arctab !== 1) return bkMsg("That isn't an ArcTab settings file.");
+  if (!confirm("Replace your settings with the ones in this file? The page reloads afterwards.")) return;
+  for (const [k, v] of Object.entries(data.localStorage || {})) if (BACKUP_LOCAL.includes(k) && typeof v === "string") localStorage.setItem(k, v);
+  await chrome.storage.local.set(Object.fromEntries(Object.entries(data.storage || {}).filter(([k]) => backupStored(k))));
+  location.reload();
+});
+
 // ⌘, (Ctrl+, elsewhere) opens these settings; pressing it again while they're open goes
 // on to Chrome's own settings in this tab, which is what ⌘, normally does.
 document.addEventListener("keydown", e => {
