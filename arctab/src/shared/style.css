@@ -62,7 +62,6 @@ header { text-align: center; margin-bottom: 24px; }
   cursor: text;
 }
 #cmd-open span { flex: 1; text-align: left; }
-#cmd-open kbd { font: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; }
 #cmd-open:hover { border-color: var(--accent); }
 
 main { transition: filter .16s ease, opacity .16s ease, transform .16s ease; }
