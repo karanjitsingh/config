@@ -972,6 +972,7 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 .peek-panel {
   display: flex;
   flex-direction: column;
+  outline: none; /* focused while open, so keys reach the homepage (peek.js) */
   /* Sized for the window it's in:
      - height: nearly all of a short window (the margin shrinks to 20px a side), more
        breathing room on a tall one, and no taller than 1240px;

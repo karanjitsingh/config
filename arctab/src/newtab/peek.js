@@ -76,7 +76,7 @@ const peek = {
       el("span", { textContent: "Not loading? Some sites don't allow being shown here." }),
       el("button", { type: "button", className: "peek-btn wide", onclick: () => this.toTab() },
         el("span", { textContent: "Expand" }), el("kbd", { className: "peek-kbd", textContent: "⌘O" })));
-    const panel = el("div", { className: "peek-panel" },
+    const panel = el("div", { className: "peek-panel", tabIndex: -1 },
       el("div", { className: "peek-bar" }, this.backBtn, this.fwdBtn, this.icon, this.title, this.host, el("span", { className: "peek-gap" }), toTab, close),
       this.body = el("div", { className: "peek-body" }, this.hint));
     this.root = el("div", { className: "peek-backdrop hidden" }, panel);
@@ -204,7 +204,9 @@ const peek = {
     this.updateNav();
     this.root.classList.remove("hidden");
     document.body.classList.add("peeking");
-    this.root.querySelector(".peek-btn.wide").focus(); // keys go to the homepage (Esc, ⌘O) until you click into the page
+    // Keys go to the homepage (Esc, ⌘O) until you click into the page. The panel takes
+    // focus, not a button: any key press would put a focus ring on a focused button.
+    this.root.querySelector(".peek-panel").focus();
     // Drop the finished open animation (it would pin opacity and block the blur-out
     // when the search bar opens over the peek).
     this.zoom(false).then(() => {
