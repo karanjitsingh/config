@@ -864,7 +864,7 @@
       if (tile?.offsetParent) { e.preventDefault(); incognito ? openUrl(tile.href, true, true) : tile.click(); return; }
     }
     if (document.body.classList.contains("navigating")) {
-      if (k === "Escape") stopNavigating();
+      if (k === "Escape") { window.stop(); stopNavigating(); } // stay here: call off the page load too
       e.preventDefault();
       return;
     }

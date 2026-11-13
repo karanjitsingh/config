@@ -130,6 +130,9 @@ async function openHere(url) {
   const cur = await chrome.tabs.getCurrent();
   if (!cur) return chrome.tabs.create({ url });
   if (isOtherExtPage(url)) return chrome.tabs.create({ url, index: cur.index + 1, windowId: cur.windowId });
+  // Web pages: the page navigates itself, so Esc can call it off (window.stop() only
+  // cancels navigations the page started). chrome:// and file:// need the tabs API.
+  if (/^https?:/i.test(url)) { location.assign(url); return; }
   return chrome.tabs.update(cur.id, { url });
 }
 
