@@ -79,9 +79,11 @@ const menu = el("div", { id: "ctxmenu", className: "hidden", role: "menu", tabIn
 document.body.append(menu);
 const hideMenu = () => menu.classList.add("hidden");
 
+// items: [label, fn, class?, checked?]; a boolean `checked` makes it a ticked/unticked toggle.
 function showMenu(x, y, items) {
-  menu.replaceChildren(...items.map(([label, fn, cls = ""]) => {
+  menu.replaceChildren(...items.map(([label, fn, cls = "", checked]) => {
     const b = el("button", { type: "button", className: cls, textContent: label, role: "menuitem" });
+    if (typeof checked === "boolean") { b.role = "menuitemcheckbox"; b.ariaChecked = String(checked); }
     b.addEventListener("click", () => { hideMenu(); fn(); });
     return b;
   }));

@@ -139,9 +139,12 @@ function linkNode(b, kind, parents) {
     // Tiles stay clean: actions live in a right-click menu instead of hover buttons.
     a.addEventListener("contextmenu", e => {
       e.preventDefault();
+      // Only while favorites peek at all (Settings → Peek).
+      const peekOff = peekOffUrls().has(b.url);
       showMenu(e.clientX, e.clientY, [
         ["Open in new tab", () => window.open(b.url, "_blank")],
         ["Open in incognito window", () => openIncognito(b.url)],
+        ...(peekOn("fav") ? [["Disable peek", () => setPeekOff(b.url, !peekOff), "", peekOff]] : []),
         ["Edit", () => editLink(b)],
         ["Unpin", () => removeLink(b, "Unpinned"), "danger"],
       ]);

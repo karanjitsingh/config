@@ -22,6 +22,15 @@ function peekOn(kind) {
   if (localStorage.peek === "off") return false; // older all-or-nothing switch
   return cfg[kind] !== false;
 }
+// Single favorites with peek turned off (right-click → Disable peek), by URL.
+function peekOffUrls() {
+  try { return new Set(JSON.parse(localStorage.peekOffUrls || "[]")); } catch { return new Set(); }
+}
+function setPeekOff(url, off) {
+  const urls = peekOffUrls();
+  if (off) urls.add(url); else urls.delete(url);
+  localStorage.peekOffUrls = JSON.stringify([...urls]);
+}
 const PEEK_ORIGINS = ["https://*/*", "http://*/*"];
 let peekRuleId = null;
 
@@ -265,7 +274,7 @@ document.addEventListener("click", e => {
   if (e.target.closest?.("button, .acts, [role=button]")) return; // ☆ / ✎ / ✕ on a link do their own thing
   const a = e.target.closest?.("a[href]");
   if (!a || !/^https?:/.test(a.href) || a.closest("#cmd-backdrop, dialog, .peek-backdrop")) return;
-  if (!peekOn(peekKind(a))) return;
+  if (!peekOn(peekKind(a)) || peekOffUrls().has(a.getAttribute("href"))) return;
   e.preventDefault(); // the link's own click handlers (seen marks etc.) still run
   const label = a.querySelector(".label")?.textContent?.trim() || a.textContent.trim().split("\n")[0];
   openPeek(a.href, label, a.getBoundingClientRect());

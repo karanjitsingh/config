@@ -600,6 +600,7 @@ dialog label .hint { opacity: .7; margin-left: 4px; }
 }
 #ctxmenu button:hover, #ctxmenu button:focus-visible { background: var(--hover); }
 #ctxmenu button.danger { color: #d64545; }
+#ctxmenu button[aria-checked="true"]::after { content: "✓"; float: right; margin-left: 16px; color: var(--accent); }
 
 .hidden { display: none !important; }
 
