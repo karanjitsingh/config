@@ -650,7 +650,7 @@
   addEventListener("pageshow", stopNavigating);
 
   // incog: open it in an incognito window (Shift+Enter, or the bar's incognito switch).
-  function activate(r, newTab, incog = incognito) {
+  async function activate(r, newTab, incog = incognito) {
     if (!r) return;
     if (!keyword && !incog && r.url && !["home", "keyhint", "info", "live"].includes(r.kind)) recordPick(typed, r);
     if (incog && !["home", "keyhint", "info"].includes(r.kind)) return openPrivately(r);
@@ -666,7 +666,7 @@
         if (OVERLAY) { chrome.search.query({ text: r.text, disposition: "NEW_TAB" }); return closeOverlay(); }
         return chrome.search.query({ text: r.text, disposition: newTab ? "NEW_TAB" : "CURRENT_TAB" });
       case "keyword":
-        return openUrl(shortcutUrl(r.sc.engine, r.sc.query), newTab);
+        return openUrl(await withAutoSend(shortcutUrl(r.sc.engine, r.sc.query)), newTab);
       case "keyhint":
         return enterKeyword(r.key);
       case "info":
@@ -679,11 +679,24 @@
   }
 
   // chrome.search can't reach an incognito window, so searches there use Google directly.
-  function openPrivately(r) {
+  async function openPrivately(r) {
     const url = r.kind === "search" ? SEARCH.g.url.replace("%s", encodeURIComponent(r.text))
-      : r.kind === "keyword" ? shortcutUrl(r.sc.engine, r.sc.query)
+      : r.kind === "keyword" ? await withAutoSend(shortcutUrl(r.sc.engine, r.sc.query))
       : r.url;
     if (url) return openUrl(url, true, true);
+  }
+
+  // claude.ai/new?q=… only fills in the prompt. Add a one-time token that
+  // src/claude/claude-send.js redeems with background.js to press Send.
+  async function withAutoSend(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname !== "claude.ai" || !u.searchParams.get("q")) return url;
+      const token = crypto.randomUUID();
+      await chrome.storage.session.set({ [`claudeSend:${token}`]: Date.now() });
+      u.searchParams.set("arctab_send", token);
+      return u.href;
+    } catch { return url; }
   }
 
   // ---------- incognito switch ----------

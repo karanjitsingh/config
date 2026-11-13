@@ -147,6 +147,36 @@ chrome.runtime.onStartup.addListener(ensurePeekKeys);
 chrome.permissions.onAdded.addListener(ensurePeekKeys);
 ensurePeekKeys();
 
+// ---------- claude.ai: press Send on prompts ArcTab opened ----------
+// Shortcut searches to claude.ai/new?q=… carry a one-time token (omnibox.js withAutoSend);
+// src/claude/claude-send.js asks here whether it's real before pressing Send. Uses the
+// https access peek asks for; nothing happens without it.
+let claudeSendChain = Promise.resolve();
+function ensureClaudeSend() {
+  claudeSendChain = claudeSendChain.then(async () => {
+    const matches = ["https://claude.ai/*"];
+    if (!(await chrome.permissions.contains({ origins: matches }))) return;
+    const have = await chrome.scripting.getRegisteredContentScripts({ ids: ["claude-send"] });
+    if (!have.length) await chrome.scripting.registerContentScripts([{ id: "claude-send", matches, js: ["src/claude/claude-send.js"], runAt: "document_start" }]);
+  }).catch(e => { if (!/Duplicate script ID/.test(e.message)) console.warn("[arctab] claude send:", e); });
+}
+chrome.runtime.onInstalled.addListener(ensureClaudeSend);
+chrome.runtime.onStartup.addListener(ensureClaudeSend);
+chrome.permissions.onAdded.addListener(ensureClaudeSend);
+ensureClaudeSend();
+
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg?.type !== "arctab:claude-send" || sender.id !== chrome.runtime.id || !sender.tab) return;
+  if (!/^https:\/\/claude\.ai\//.test(sender.url || "") || typeof msg.token !== "string") return reply(false);
+  const key = `claudeSend:${msg.token}`;
+  // One use only, and only shortly after the search was opened.
+  chrome.storage.session.get(key).then(async ({ [key]: at }) => {
+    await chrome.storage.session.remove(key);
+    reply(typeof at === "number" && Date.now() - at < 60_000);
+  }, () => reply(false));
+  return true;
+});
+
 importScripts("peek/userscripts.js"); // userscripts in peeks (Tampermonkey can't reach them)
 
 try { importScripts("../local/background.local.js"); } catch { /* no private handlers installed */ }

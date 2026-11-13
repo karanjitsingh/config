@@ -8,5 +8,6 @@ const SEARCH_BASE = {
   g:  { name: "Google",  url: "https://www.google.com/search?q=%s" },
   gh: { name: "GitHub",  url: "https://github.com/search?q=%s&type=code" },
   yt: { name: "YouTube", url: "https://www.youtube.com/results?search_query=%s" },
+  c:  { name: "Claude",  url: "https://claude.ai/new?q=%s" }, // sent right away (src/claude/claude-send.js)
   settings: { name: "Settings", url: "chrome://settings/?search=%s" },
 };
