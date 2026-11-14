@@ -78,6 +78,21 @@ const peek = {
     this.fwdBtn.innerHTML = chevron("M6 3.5 10.5 8 6 12.5");
     this.backBtn.addEventListener("click", () => this.go(-1));
     this.fwdBtn.addEventListener("click", () => this.go(1));
+    // Copy the address of the page you're on in the peek (after any clicks inside it).
+    const LINK_ICON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.3-2.3a2.6 2.6 0 0 0-3.7-3.7l-.8.8"/><path d="M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.2 9.1a2.6 2.6 0 0 0 3.7 3.7l.8-.8"/></svg>';
+    const CHECK_ICON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.4 2.9 2.9 6.1-6.6"/></svg>';
+    const copyBtn = el("button", { type: "button", className: "peek-btn peek-nav peek-copy", title: "Copy link", ariaLabel: "Copy link" });
+    copyBtn.innerHTML = LINK_ICON;
+    let copiedTimer;
+    copyBtn.addEventListener("click", () => {
+      const url = this.currentUrl();
+      navigator.clipboard.writeText(url).then(() => {
+        copyBtn.innerHTML = CHECK_ICON;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => { copyBtn.innerHTML = LINK_ICON; }, 1200);
+        toast("Copied link");
+      }, () => toast("Couldn't copy to the clipboard"));
+    });
     this.icon = el("img", { className: "peek-ico", alt: "", width: 16, height: 16 });
     this.title = el("span", { className: "peek-title" });
     this.host = el("span", { className: "peek-host" });
@@ -86,7 +101,7 @@ const peek = {
       el("button", { type: "button", className: "peek-btn wide", onclick: () => this.toTab() },
         el("span", { textContent: "Expand" }), el("kbd", { className: "peek-kbd", textContent: "⌘O" })));
     const panel = el("div", { className: "peek-panel", tabIndex: -1 },
-      el("div", { className: "peek-bar" }, this.backBtn, this.fwdBtn, this.icon, this.title, this.host, el("span", { className: "peek-gap" }), toTab, close),
+      el("div", { className: "peek-bar" }, this.backBtn, this.fwdBtn, this.icon, this.title, this.host, el("span", { className: "peek-gap" }), copyBtn, toTab, close),
       this.body = el("div", { className: "peek-body" }, this.hint));
     this.root = el("div", { className: "peek-backdrop hidden" }, panel);
     this.root.addEventListener("mousedown", e => { if (e.target === this.root) this.close(); });
@@ -238,10 +253,14 @@ const peek = {
     this.frame = null;
     this.closing = false;
   },
+  // The page you're on in the peek: where you've clicked to, not just where it opened.
+  currentUrl() {
+    const n = this.frame?.nav;
+    return n?.list[n.i] || this.url;
+  },
   toTab() {
     // Navigate this tab to the page you're on in the peek (Back returns to the homepage).
-    const n = this.frame?.nav;
-    location.href = n?.list[n.i] || this.url;
+    location.href = this.currentUrl();
   },
 };
 
