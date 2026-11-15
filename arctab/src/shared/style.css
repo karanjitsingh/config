@@ -1442,3 +1442,42 @@ body.private #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .5), 0 0 0 1px rgba(25
 .us-msg:empty { display: none; }
 #settings #us-off[hidden] { display: none; }
 #settings #us-off { margin-bottom: 10px; }
+
+/* ======================================================================
+   Scrolling the homepage: the clock drifts back and fades out, the search
+   pill sticks to the top, and a frosted band fades in behind it so cards pass
+   under it softly. Scroll-driven (no JS); --pin goes 0 → 1 as the pill docks.
+   ====================================================================== */
+@property --pin { syntax: "<number>"; inherits: true; initial-value: 0; }
+@keyframes pin-in { to { --pin: 1; } }
+@keyframes hero-out { to { opacity: 0; transform: translateY(36px) scale(.86); filter: blur(6px); } }
+
+body:not(.overlay) { animation: pin-in linear both; animation-timeline: scroll(root); animation-range: 110px 175px; }
+
+header { transform-origin: 50% 100%; }
+@media (prefers-reduced-motion: no-preference) {
+  body:not(.overlay) header { animation: hero-out linear both; animation-timeline: scroll(root); animation-range: 0 150px; }
+}
+
+#cmd-open {
+  position: sticky;
+  top: 16px;
+  z-index: 9; /* above cards, below the context menu */
+  width: min(calc(560px - 40px * var(--pin)), 100%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, calc(.04 + .03 * var(--pin))),
+    0 calc(6px + 6px * var(--pin)) calc(20px + 16px * var(--pin)) rgba(0, 0, 0, calc(.05 + .07 * var(--pin)));
+}
+#cmd-open:hover { box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 12px 32px rgba(0, 0, 0, calc(.08 + .04 * var(--pin))); }
+
+/* Progressive frost: stacked layers, each blurring less and reaching further down,
+   so the blur tapers off instead of ending at one mask edge. Opacity sits on each layer:
+   on their shared parent it would cut the backdrop blur off. */
+#frost { position: fixed; inset: 0 0 auto; height: 140px; z-index: 8; pointer-events: none; }
+#frost > i { position: absolute; inset: 0; opacity: var(--pin); }
+#frost > i:nth-child(1) { backdrop-filter: blur(1px);  mask-image: linear-gradient(#000 70%, transparent 100%); }
+#frost > i:nth-child(2) { backdrop-filter: blur(3px);  mask-image: linear-gradient(#000 55%, transparent 85%); }
+#frost > i:nth-child(3) { backdrop-filter: blur(6px);  mask-image: linear-gradient(#000 45%, transparent 70%); }
+#frost > i:nth-child(4) { backdrop-filter: blur(12px) saturate(1.2); mask-image: linear-gradient(#000 35%, transparent 58%); }
+#frost > i:nth-child(5) { background: linear-gradient(color-mix(in srgb, var(--bg) 55%, transparent) 30%, transparent 62%); }
+body.overlay #frost, body.cmd-open #frost, body.peeking #frost, body.search-only #frost { display: none; }
