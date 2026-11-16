@@ -221,15 +221,49 @@ async function fillUserScripts() {
   const { peekUserScripts: list = [] } = await chrome.storage.local.get("peekUserScripts");
   const save = next => chrome.storage.local.set({ peekUserScripts: next }).then(fillUserScripts);
   const where = s => [...(s.meta.match || []), ...(s.meta.include || [])].slice(0, 2).join(", ") || "every site";
+  // Sites its GM_xmlhttpRequest calls reach (@connect) go through the background's fetch,
+  // which needs access to them. "*" and "self" aren't asked for (the page's own site is
+  // the peek's, and "*" would mean every site).
+  const connectOrigins = s => (s.meta.connect || []).filter(c => c && c !== "*" && c !== "self" && !/[/:]/.test(c))
+    .map(c => `https://*.${c.replace(/^\*\./, "")}/*`);
+  const missing = new Map();
+  for (const s of list) {
+    const origins = connectOrigins(s);
+    if (origins.length && !(await chrome.permissions.contains({ origins }))) missing.set(s.id, origins);
+  }
   $("#us-list").replaceChildren(...list.map(s => {
     const box = el("input", { type: "checkbox", className: "switch", checked: s.enabled, title: s.enabled ? "On in peeks" : "Off" });
     box.addEventListener("change", () => save(list.map(x => (x.id === s.id ? { ...x, enabled: box.checked } : x))));
     const x = el("button", { type: "button", className: "set-btn us-x", textContent: "Remove", title: "Remove from ArcTab (Tampermonkey keeps its copy)" });
     x.addEventListener("click", e => { e.preventDefault(); save(list.filter(y => y.id !== s.id)); });
-    const sub = [where(s), s.url ? (s.url.startsWith("file:") ? `file ${s.url.split("/").pop()}` : s.url) : "added as a file", s.error && `couldn't re-read: ${s.error}`].filter(Boolean).join(" · ");
+    // Scripts from an address: re-read it now (it also happens on its own in the background).
+    let up = "";
+    if (s.url) {
+      up = el("button", { type: "button", className: "set-btn us-x us-up", textContent: "Update", title: "Re-read the script from its address now (if it can't, the current copy keeps running)" });
+      up.addEventListener("click", async e => {
+        e.preventDefault();
+        up.disabled = true;
+        usMsg("Checking for updates…");
+        const r = await usAsk({ type: "us:refresh" });
+        const { peekUserScripts: after = [] } = await chrome.storage.local.get("peekUserScripts");
+        const now = after.find(y => y.id === s.id);
+        usMsg(r?.error || now?.error ? `Couldn't re-read it, still using the copy from before: ${r?.error || now.error}`
+          : now?.source !== s.source ? `Updated “${now.name}”. Reopen the peek to run it.` : "Already up to date.");
+        fillUserScripts();
+      });
+    }
+    let allow = "";
+    if (missing.has(s.id)) {
+      allow = el("button", { type: "button", className: "set-btn primary us-x us-up", textContent: "Allow sites", title: `It talks to ${(s.meta.connect || []).join(", ")}: give ArcTab access so those requests work` });
+      allow.addEventListener("click", e => {
+        e.preventDefault();
+        chrome.permissions.request({ origins: missing.get(s.id) }).then(ok => { usMsg(ok ? "" : "Without access to those sites, the script's requests to them will fail."); fillUserScripts(); });
+      });
+    }
+    const sub = [where(s), s.url ? (s.url.startsWith("file:") ? `file ${s.url.split("/").pop()}` : s.url) : "added as a file", s.error && `couldn't re-read: ${s.error}, using the copy from before`].filter(Boolean).join(" · ");
     return el("label", { className: "set-row" },
       el("span", { className: "set-text" }, el("b", { textContent: s.meta.version?.[0] ? `${s.name} ${s.meta.version[0]}` : s.name }), el("span", { className: "hint", textContent: sub })),
-      x, box);
+      el("span", { className: "us-acts" }, allow, up, x), box);
   }));
 }
 async function addUserScript(msg) {
@@ -242,7 +276,13 @@ $("#us-add-url").addEventListener("click", () => {
   const url = $("#us-url").value.trim();
   if (!/^(https?|file):\/\//.test(url)) return usMsg("Enter an https:// or file:// address of a .user.js");
   if (url.startsWith("file:")) usMsg("Reading a file:// address needs “Allow access to file URLs” for ArcTab in chrome://extensions.");
-  addUserScript({ url }).then(() => { $("#us-url").value = ""; });
+  // The background downloads it (now and on every re-read), so it needs access to that
+  // site. Asked here, on the click: permission prompts need the user gesture.
+  const ask = url.startsWith("file:") ? Promise.resolve(true) : chrome.permissions.request({ origins: [`${new URL(url).origin}/*`] });
+  ask.then(ok => {
+    if (!ok) return usMsg(`ArcTab needs access to ${new URL(url).host} to download the script and keep it updated.`);
+    return addUserScript({ url }).then(() => { $("#us-url").value = ""; });
+  }, e => usMsg(`Couldn't ask for access: ${e.message}`));
 });
 $("#us-file").addEventListener("change", async e => {
   const f = e.target.files[0];

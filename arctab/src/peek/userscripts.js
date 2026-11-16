@@ -101,29 +101,41 @@ function usSync() {
   return usChain;
 }
 
-// Scripts added by URL are re-read now and then (and on Settings' ↻), so edits show up.
-async function usRefreshSources(force = false) {
+// Scripts added by URL are re-read in the background (at most every US_REFRESH_MS: when
+// the worker starts, when a peek opens, and on Settings' ↻), so edits show up. If a
+// re-read fails (offline, HTTP error, a sign-in page instead of the script, a @require
+// that won't load), the last good copy keeps running and the error shows in Settings.
+let usRefreshing = null;
+function usRefreshSources(force = false) {
+  return usRefreshing ||= usRefreshNow(force).finally(() => { usRefreshing = null; });
+}
+async function usRefreshNow(force) {
   const { [US_KEY]: list = [] } = await chrome.storage.local.get(US_KEY);
-  let changed = false;
-  for (const [i, s] of list.entries()) {
+  const updates = new Map(); // id -> fields to change
+  for (const s of list) {
     if (!s.url || (!force && Date.now() - (s.at || 0) < US_REFRESH_MS)) continue;
     try {
       const res = await fetch(s.url, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const source = await res.text();
-      list[i] = source === s.source ? { ...s, at: Date.now(), error: undefined } : await usBuild(source, s);
-    } catch (e) { list[i] = { ...s, at: Date.now(), error: e.message }; }
-    changed = true;
+      if (!/==UserScript==/.test(source)) throw new Error("got a page without a ==UserScript== header (signed out?)");
+      if (source === s.source) { updates.set(s.id, { at: Date.now(), error: undefined }); continue; }
+      const { id, enabled, ...built } = await usBuild(source, s);
+      updates.set(s.id, { ...built, error: undefined });
+    } catch (e) { updates.set(s.id, { at: Date.now(), error: e.message }); }
   }
-  if (changed) await chrome.storage.local.set({ [US_KEY]: list });
+  if (!updates.size) return;
+  // Re-read before writing: a toggle or removal made while fetching wins.
+  const { [US_KEY]: now = [] } = await chrome.storage.local.get(US_KEY);
+  await chrome.storage.local.set({ [US_KEY]: now.map(s => (updates.has(s.id) ? { ...s, ...updates.get(s.id) } : s)) });
 }
 
 chrome.storage.onChanged.addListener((c, area) => {
   if (area === "local" && US_KEY in c) usSync();
 });
 chrome.runtime.onInstalled.addListener(() => usSync());
-chrome.runtime.onStartup.addListener(() => usRefreshSources().then(usSync));
 usSync();
+usRefreshSources(); // the worker starting up (browser start, or woken by anything); stored changes re-sync via onChanged
 
 // Settings asks for these (it can't fetch file:// itself, and builds go through here).
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
@@ -149,6 +161,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       return { ok: true, name: s.name };
     }
     if (msg.type === "us:refresh") { await usRefreshSources(true); return { ok: true }; }
+    if (msg.type === "us:refresh-if-old") { usRefreshSources(); return { ok: true }; } // a peek opened
     throw new Error(`unknown ${msg.type}`);
   })().then(reply, e => reply({ error: e.message }));
   return true;

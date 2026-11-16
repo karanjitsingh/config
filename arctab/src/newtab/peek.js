@@ -212,6 +212,9 @@ const peek = {
   },
   open(url, label, fromRect) {
     this.build();
+    // Re-read userscripts added by URL if they're due (in the background: this peek uses
+    // the copy already registered, the next one gets any update).
+    chrome.runtime.sendMessage({ type: "us:refresh-if-old" }).catch(() => {});
     this.fromRect = fromRect || null;
     this.url = url;
     this.title.textContent = label || hostOf(url);

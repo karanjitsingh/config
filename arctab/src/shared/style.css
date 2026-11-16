@@ -1440,6 +1440,10 @@ body.private #cmd { box-shadow: 0 30px 80px rgba(0, 0, 0, .5), 0 0 0 1px rgba(25
 #settings #us-list .set-text { flex: 1; }
 #settings .set-row .us-x { padding: 4px 10px; font-size: 12px; font-weight: 400; color: var(--muted); }
 #settings .set-row .us-x:hover { color: #d64545; border-color: #d64545; }
+#settings .set-row .us-up:hover { color: var(--text); border-color: var(--accent); }
+#settings .set-row .us-up:disabled { opacity: .5; cursor: default; }
+/* Update and Remove sit together, apart from the switch. */
+#settings .us-acts { display: flex; flex: none; gap: 6px; }
 .us-msg { margin: 8px 2px 0; }
 .us-msg:empty { display: none; }
 #settings #us-off[hidden] { display: none; }
