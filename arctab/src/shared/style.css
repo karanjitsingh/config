@@ -993,6 +993,8 @@ dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 .peek-ico { flex: none; width: 16px; height: 16px; border-radius: 3px; }
 .peek-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 13px; }
 .peek-host { flex: none; font-size: 12px; color: var(--muted); }
+.peek-copyable { cursor: pointer; border-radius: 4px; }
+.peek-copyable:hover { text-decoration: underline; text-underline-offset: 2px; }
 .peek-gap { flex: 1; }
 .peek-btn {
   flex: none;

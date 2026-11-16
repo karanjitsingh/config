@@ -84,7 +84,7 @@ const peek = {
     const copyBtn = el("button", { type: "button", className: "peek-btn peek-nav peek-copy", title: "Copy link", ariaLabel: "Copy link" });
     copyBtn.innerHTML = LINK_ICON;
     let copiedTimer;
-    copyBtn.addEventListener("click", () => {
+    const copyLink = () => {
       const url = this.currentUrl();
       navigator.clipboard.writeText(url).then(() => {
         copyBtn.innerHTML = CHECK_ICON;
@@ -92,10 +92,17 @@ const peek = {
         copiedTimer = setTimeout(() => { copyBtn.innerHTML = LINK_ICON; }, 1200);
         toast("Copied link");
       }, () => toast("Couldn't copy to the clipboard"));
-    });
+    };
+    copyBtn.addEventListener("click", copyLink);
     this.icon = el("img", { className: "peek-ico", alt: "", width: 16, height: 16 });
     this.title = el("span", { className: "peek-title" });
     this.host = el("span", { className: "peek-host" });
+    // Clicking the page's name or address in the bar copies the link too.
+    for (const t of [this.title, this.host]) {
+      t.classList.add("peek-copyable");
+      t.title = "Click to copy link";
+      t.addEventListener("click", copyLink);
+    }
     this.hint = el("div", { className: "peek-hint hidden" },
       el("span", { textContent: "Not loading? Some sites don't allow being shown here." }),
       el("button", { type: "button", className: "peek-btn wide", onclick: () => this.toTab() },
