@@ -57,7 +57,7 @@ if (localStorage.overlayUpdates !== "off" && !chrome.extension?.inIncognitoConte
       // Older published items have no kind; their sub started with it.
       const kind = it.kind || (/^Code review/.test(it.sub) ? "review" : "ticket");
       const a = el("a", { className: "upd", href: it.url },
-        el("span", { className: `upd-kind is-${kind}`, textContent: kind === "review" ? "Review" : kind === "ticket" ? "Ticket" : kind }),
+        el("span", { className: `upd-kind is-${kind}`, textContent: { review: "Review", ticket: "Ticket" }[kind] || kind }),
         el("span", { className: "upd-title", textContent: it.title }),
         el("span", { className: "upd-sub", textContent: it.kind ? it.sub || "" : "" }));
       // ✓ on the right (on hover): mark it read without opening it.

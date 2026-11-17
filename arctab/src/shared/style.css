@@ -1373,11 +1373,13 @@ body.overlay .upd-list:not(:empty) {
   text-transform: uppercase;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+  overflow: hidden; /* a widget's own longer kind is cut, not spilled over the title */
+  text-overflow: ellipsis;
 }
 .upd-kind.is-ticket { color: #d9822b; background: color-mix(in srgb, #d9822b 15%, transparent); }
-/* Only the title is ever cut short; the note stays whole. */
+/* The title is cut short first; a note only once it's past a third of the row. */
 .upd-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); text-shadow: 0 1px 8px color-mix(in srgb, var(--bg) 70%, transparent); }
-.upd-sub { flex: none; color: color-mix(in srgb, var(--text) 58%, transparent); font-size: 12px; }
+.upd-sub { flex: 0 0 auto; max-width: 35%; overflow: hidden; text-overflow: ellipsis; color: color-mix(in srgb, var(--text) 58%, transparent); font-size: 12px; }
 .upd-more {
   align-self: center;
   margin: 2px 0 3px;
