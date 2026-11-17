@@ -10,6 +10,10 @@ const state = { other: null, bar: null, fav: null, archive: null, pinned: new Se
 //   collapsed: section ids that are collapsed
 //   open:      group (sub-folder) ids that are expanded
 //   sizes:     { cardId: { span, height } } for resizable widgets (columns wide, body px)
+//   order:     every card id, in the order arrange() places them across columns (cols
+//              still decides the order within a column; this decides how the columns
+//              interleave, so a card can sit below a wide card from another column).
+//              Ids missing from it are placed row by row, as before it existed.
 //   version:   2 = cols lists exactly the cards on the page. Before that every top-level
 //              folder showed automatically (plus v1's `widgets`/`hidden` lists).
 // Cards are bookmark folder ids or "widget:<id>". Nothing appears on its own: folders and
@@ -17,7 +21,7 @@ const state = { other: null, bar: null, fav: null, archive: null, pinned: new Se
 const LAYOUT_KEY = "layout";
 const LAYOUT_VERSION = 2;
 const MAX_COLS = 5;
-const layout = { columns: 3, cols: [[], [], []], collapsed: new Set(), open: new Set(), sizes: {}, version: 0, legacy: null, loaded: false };
+const layout = { columns: 3, cols: [[], [], []], collapsed: new Set(), open: new Set(), sizes: {}, order: [], version: 0, legacy: null, loaded: false };
 const openGroups = layout.open;
 
 async function loadSavedLayout() {
@@ -30,6 +34,7 @@ async function loadSavedLayout() {
     saved.open.forEach(id => layout.open.add(id));
     layout.version = saved.version || 1;
     layout.sizes = saved.sizes || {};
+    layout.order = saved.order || [];
     layout.legacy = { widgets: saved.widgets || [], hidden: saved.hidden || [] };
   } else {
     JSON.parse(localStorage.openGroups || "[]").forEach(id => layout.open.add(id)); // from v3
@@ -41,6 +46,7 @@ function saveLayout() {
   return chrome.storage.local.set({ [LAYOUT_KEY]: {
     version: LAYOUT_VERSION, columns: layout.columns, cols: layout.cols,
     collapsed: [...layout.collapsed], open: [...layout.open], sizes: layout.sizes,
+    order: layout.order.filter(onPage),
   } });
 }
 const saveOpenGroups = saveLayout;
@@ -76,10 +82,15 @@ const rows = f => (f.children || []).length;
 
 function moveSection(id, colIndex, beforeId) {
   document.body.classList.remove("dragging-section"); // the dragged node is re-rendered, so dragend may not fire
+  layout.order = placementOrder().filter(x => x !== id); // pin down the current interleaving first
   layout.cols.forEach(c => { const i = c.indexOf(id); if (i !== -1) c.splice(i, 1); });
   const col = layout.cols[colIndex];
   const i = beforeId ? col.indexOf(beforeId) : -1;
   i === -1 ? col.push(id) : col.splice(i, 0, id);
+  // Before a card: takes its turn. At the end of a column: after everything already on the
+  // page, so it lands below anything covering that column (what the drop outline shows).
+  const oi = i === -1 ? -1 : layout.order.indexOf(beforeId);
+  oi === -1 ? layout.order.push(id) : layout.order.splice(oi, 0, id);
   saveLayout();
   load();
 }
@@ -109,6 +120,7 @@ function placeCard(id) {
   const col = layout.cols.reduce((a, b) => (weight(b) < weight(a) ? b : a));
   const ai = col.indexOf(state.archive?.id);
   ai === -1 ? col.push(id) : col.splice(ai, 0, id); // keep Archive at the bottom
+  layout.order.push(id);
   layout.collapsed.delete(id);
   saveLayout();
   load();
@@ -315,6 +327,24 @@ function columnMetrics() {
   return { sec, n, W, gap: GAP, colW: (W - GAP * (n - 1)) / n };
 }
 
+// Every card on the page in placement order: each column's cards in their own order,
+// interleaved by layout.order (cards it doesn't list go row by row, after those it does).
+function placementOrder() {
+  const rank = new Map(layout.order.map((id, i) => [id, i]));
+  const key = (id, row, c) => rank.get(id) ?? 1e6 + row * 10 + c;
+  const heads = layout.cols.map(() => 0);
+  const out = [];
+  for (;;) {
+    let best = -1, bestKey = Infinity;
+    layout.cols.forEach((col, c) => {
+      const id = col[heads[c]];
+      if (id !== undefined && key(id, heads[c], c) < bestKey) { best = c; bestKey = key(id, heads[c], c); }
+    });
+    if (best === -1) return out;
+    out.push(layout.cols[best][heads[best]++]);
+  }
+}
+
 function arrange() {
   const { sec, n, W, gap, colW } = columnMetrics();
   const cols = [...sec.querySelectorAll(":scope > .col")];
@@ -337,9 +367,13 @@ function arrange() {
   };
   if (single) queues.forEach((q, c) => q.forEach(card => place(card, c)));
   else {
-    for (let row = 0; queues.some(q => q.length > row); row++) {
-      queues.forEach((q, c) => { if (q[row]) place(q[row], c); });
+    const at = new Map(queues.flatMap((q, c) => q.map(card => [card.dataset.id, [card, c]])));
+    const done = new Set();
+    for (const id of placementOrder()) {
+      const hit = at.get(id);
+      if (hit) { place(...hit); done.add(id); }
     }
+    queues.forEach((q, c) => q.forEach(card => { if (!done.has(card.dataset.id)) place(card, c); })); // not in layout.cols (shouldn't happen)
   }
   sec.style.height = `${Math.max(0, ...bottoms.map(b => b - gap))}px`;
 }
