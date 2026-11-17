@@ -158,11 +158,11 @@
             ]
           },
           {
-            "description": "Alt + k - Kiro",
+            "description": "Alt + k - Kiro Crew",
             "manipulators": [
               {
                 "from": { "key_code": "k", "modifiers": { "mandatory": [ "left_option" ] } },
-                "to": [ { "software_function": { "open_application": { "file_path": "/Applications/Kiro.app" } } } ],
+                "to": [ { "shell_command": "if pgrep -qf 'KiroCrew.app/Contents/MacOS/KiroCrew$'; then open \"$HOME/Library/Application Support/KiroCrewInternal/KiroCrew.app\"; else open \"$HOME/Applications/KiroCrew.app\"; fi" } ],
                 "type": "basic"
               }
             ]

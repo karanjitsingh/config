@@ -19,3 +19,11 @@ fi
 echo "Setting up Karabiner${variant:+ ($variant)}..."
 mkdir -p ~/.config/karabiner
 link_file "$config" ~/.config/karabiner/karabiner.json "Karabiner config"
+
+# Restart the user server so it reloads the config (no-op if Karabiner isn't running)
+service="gui/$(id -u)/org.pqrs.service.agent.Karabiner-Console-User-Server"
+if launchctl print "$service" >/dev/null 2>&1; then
+    launchctl kickstart -k "$service" && echo "✓ Restarted Karabiner"
+else
+    echo "⊘ Karabiner service not running, skipping restart"
+fi
