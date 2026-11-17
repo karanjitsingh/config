@@ -744,52 +744,69 @@ dialog#add-dlg {
 .dlg-back { margin-left: -6px; padding-bottom: 2px; font-size: 22px; line-height: 1; }
 .dlg-x:hover, .dlg-back:hover { background: var(--hover); color: var(--text); }
 
-.wg-list { display: flex; flex-direction: column; gap: 8px; }
+.wg-list { display: flex; flex-direction: column; }
+/* Small caps label over each group. */
+.wg-sec { margin: 4px 4px 6px; font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
+.wg-sec:not(:first-child) { margin-top: 16px; }
+/* One rounded container per group, rows split by hairlines. */
+.wg-group { overflow: hidden; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
 .wg-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  transition: border-color .12s, background .12s;
+  gap: 12px;
+  padding: 10px 12px;
+  transition: background .12s;
 }
+.wg-item + .wg-item { box-shadow: inset 0 1px 0 var(--border); }
+.wg-item:hover { background: var(--hover); }
 .wg-item.clickable { cursor: pointer; outline: none; }
-.wg-item.clickable:hover, .wg-item.clickable:focus-visible { border-color: var(--accent); background: var(--card); }
+.wg-item.clickable:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .wg-ico {
   display: grid;
   place-items: center;
   flex: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   color: var(--accent);
   background: var(--sel);
 }
-.wg-ico svg { display: block; }
+.wg-ico svg { display: block; width: 17px; height: 17px; }
 .wg-text { flex: 1; min-width: 0; }
-.wg-title { font-weight: 600; }
-.wg-desc { margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--muted); }
-.wg-go { flex: none; color: var(--muted); }
-.wg-item.clickable:hover .wg-go { color: var(--accent); }
+.wg-title { font-size: 13.5px; font-weight: 600; }
+.wg-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.wg-go { flex: none; color: var(--muted); transition: transform .12s, color .12s; }
+.wg-item.clickable:hover .wg-go { color: var(--accent); transform: translateX(2px); }
 .wg-go svg { display: block; }
+/* Add: tinted, solid on hover. Added: quiet with a check, turns into Remove on hover. */
 .pill {
   flex: none;
-  min-width: 68px;
-  padding: 6px 14px;
+  min-width: 72px;
+  padding: 4px 12px;
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: #fff;
-  background: var(--accent);
-  border: 1px solid var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--sel);
+  border: 1px solid transparent;
   border-radius: 999px;
   cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
 }
-.pill.on { color: var(--muted); background: transparent; border-color: var(--border); }
+.pill:hover { color: #fff; background: var(--accent); }
+.pill:not(.on)::before { content: "+ "; }
+.pill.on { font-weight: 500; color: var(--muted); background: transparent; border-color: var(--border); }
 .pill.on::before { content: "✓ "; }
-.pill.on:hover { color: #d64545; border-color: #d64545; }
+.pill.on:hover { color: #d64545; background: transparent; border-color: #d64545; }
 .pill.on:hover::before { content: ""; }
 
 #add-dlg #af-filter {

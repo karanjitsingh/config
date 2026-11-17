@@ -161,12 +161,16 @@ const svgNode = (markup, className) => { const n = el("span", { className }); n.
 // Add / Added toggle for a widget.
 function toggleButton(id, add, title) {
   const b = el("button", { type: "button", className: "pill" });
+  let hover = false;
   const sync = () => {
     const on = onPage(id);
-    b.textContent = on ? "Added" : "Add";
+    b.textContent = on ? (hover ? "Remove" : "Added") : "Add";
     b.classList.toggle("on", on);
     b.title = on ? "Remove from page" : "Add to page";
   };
+  // Added says what a click would do while you're on it.
+  b.addEventListener("mouseenter", () => { hover = true; sync(); });
+  b.addEventListener("mouseleave", () => { hover = false; sync(); });
   b.addEventListener("click", () => { onPage(id) ? removeCard(id, title) : add(); sync(); });
   sync();
   return b;
@@ -177,9 +181,13 @@ function galleryItem({ icon, title, desc, action }) {
     svgNode(icon, "wg-ico"),
     el("div", { className: "wg-text" },
       el("div", { className: "wg-title", textContent: title }),
-      desc ? el("div", { className: "wg-desc", textContent: desc }) : ""),
+      desc ? el("div", { className: "wg-desc", textContent: desc, title: desc }) : ""), // clamped to two lines; hover for all of it
     action);
 }
+// A labelled group of rows, like a settings list.
+const gallerySection = (label, rows) => (rows.length
+  ? [el("div", { className: "wg-sec", textContent: label }), el("div", { className: "wg-group" }, ...rows)]
+  : []);
 
 function openAddDialog() {
   const folder = galleryItem({ icon: ICONS.folder, title: "Bookmarks folder",
@@ -190,7 +198,7 @@ function openAddDialog() {
   folder.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showFolderPicker(); } });
   const widgets = [...WIDGETS.values()].map(d => galleryItem({ icon: d.icon || ICONS.widget, title: d.title,
     desc: d.description, action: toggleButton(widgetKey(d.id), () => addWidget(d), d.title) }));
-  $("#wg-list").replaceChildren(folder, ...widgets);
+  $("#wg-list").replaceChildren(...gallerySection("Bookmarks", [folder]), ...gallerySection("Widgets", widgets));
   showAddView("main");
   addDlg.showModal();
   folder.focus();
