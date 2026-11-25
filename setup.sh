@@ -19,6 +19,7 @@ show_usage() {
     echo "  tmux        tmux config + plugins"
     echo "  karabiner   Karabiner-Elements config (macOS only)"
     echo "              add 'amzn' for the work variant: $0 karabiner amzn"
+    echo "  iterm       iTerm2 Ctrl+Cmd+V paste-image binding (macOS only)"
     echo "  pi          pi coding-agent"
     echo "  claude      Claude Code statusline"
     echo ""
@@ -32,7 +33,7 @@ fi
 while [ $# -gt 0 ]; do
     cmd=$1; shift
     case "$cmd" in
-        all)        run neovim; run zsh; run tmux; run karabiner; run pi; run claude ;;
+        all)        run neovim; run zsh; run tmux; run karabiner; run iterm; run pi; run claude ;;
         neovim)     run neovim ;;
         zsh)        run zsh ;;
         scripts)    run scripts ;;
@@ -45,6 +46,7 @@ while [ $# -gt 0 ]; do
                 run karabiner
             fi
             ;;
+        iterm)      run iterm ;;
         pi)         run pi ;;
         claude)     run claude ;;
         -h|--help)  show_usage; exit 0 ;;
