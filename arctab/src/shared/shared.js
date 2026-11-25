@@ -95,7 +95,7 @@ async function favoriteStrip(nav, onOpen) {
       ico.onerror = () => ico.replaceWith(mk("i", "letter", { textContent: label[0].toUpperCase(), style: "width:28px;height:28px;font-size:17px" }));
     }
     const a = mk("a", "fav", { href: b.url, title: b.url });
-    if (i < 9) a.dataset.n = i + 1; // 1–9 opens it (see omnibox.js)
+    if (i < 9) a.dataset.n = i + 1; // typing 1–9 offers it in the bar (see omnibox.js)
     a.append(ico, mk("span", "label", { textContent: label }));
     if (onOpen) a.addEventListener("click", e => { e.preventDefault(); onOpen(b.url, e); });
     return a;

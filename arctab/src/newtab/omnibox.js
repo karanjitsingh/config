@@ -390,8 +390,14 @@
       }
       if (q && SEARCH_SUGGEST[sc.key] && !IN_INCOGNITO) liveSuggest(sc.key, q, my);
     } else {
+      // A lone digit offers that favorite (0: the homepage) as the top row, so Enter opens it
+      // and typing on just searches (search-only tab / Ctrl+T overlay, where the tiles show).
+      const digit = /^[0-9]$/.test(q) && localStorage.favDigits !== "off" && (searchOnly() || OVERLAY);
+      const tile = digit && q !== "0" && document.querySelector(`#so-favs .fav[data-n="${q}"]`);
+      const favRow = tile ? { kind: "fav", url: tile.href, title: tile.querySelector(".label").textContent, sub: `Favorite ${q}` }
+        : digit && q === "0" && !IN_INCOGNITO ? { kind: "home", title: "ArcTab Home", sub: "Show your homepage", svg: HOME_ICON } : null;
       const list = candidates(q, tabsByUrl);
-      const inl = allowInline ? inlineCandidate(q, list) : null;
+      const inl = allowInline && !favRow ? inlineCandidate(q, list) : null;
       if (inl) {
         completion = inl;
         const match = list.find(c => norm(c.url) === norm(inl.url));
@@ -408,8 +414,9 @@
         const exact = ["home", "arctab"].includes(lq0(q));
         next.splice(exact ? 0 : next.length, 0, { kind: "home", title: "ArcTab Home", sub: "Show your homepage", svg: HOME_ICON });
       }
+      if (favRow) next.unshift(favRow);
       if (SEARCH[q] && !/\s/.test(typed)) next.push({ kind: "keyhint", key: q, title: `Search ${SEARCH[q].name}`, sub: "press Tab", iconUrl: engineOrigin(q) });
-      next.splice(["url", "chrome", "home"].includes(next[0]?.kind) ? 1 : 0, 0, { kind: "search", text: q, title: q, sub: "Search" });
+      next.splice(["url", "chrome", "home", "fav"].includes(next[0]?.kind) ? 1 : 0, 0, { kind: "search", text: q, title: q, sub: "Search" });
       for (const c of list) {
         if (next.length >= MAX_ROWS) break;
         if (next.some(r => sameRow(r, c))) continue;
@@ -559,7 +566,7 @@
     else if (r.url && r.title !== display(r.url)) text.append(el("span", { className: "sug-sub" }, " – ", shown(r.url)));
     else if (r.sub) text.append(el("span", { className: "sug-sub" }, ` – ${r.sub}`));
     n.append(ico, text);
-    if (r.kind === "bookmark") n.append(el("span", { className: "sug-mark", textContent: "★", title: "Bookmarked" }));
+    if (r.kind === "bookmark" || r.kind === "fav") n.append(el("span", { className: "sug-mark", textContent: "★", title: "Bookmarked" }));
     if (r.tab) {
       // Copies of the same page are told apart by where they are.
       const where = r.tab.windowId !== myWindowId ? " · other window" : "";
@@ -652,7 +659,7 @@
   // incog: open it in an incognito window (Shift+Enter, or the bar's incognito switch).
   async function activate(r, newTab, incog = incognito) {
     if (!r) return;
-    if (!keyword && !incog && r.url && !["home", "keyhint", "info", "live"].includes(r.kind)) recordPick(typed, r);
+    if (!keyword && !incog && r.url && !["home", "keyhint", "info", "live", "fav"].includes(r.kind)) recordPick(typed, r);
     if (incog && !["home", "keyhint", "info"].includes(r.kind)) return openPrivately(r);
     // Anything already open in another tab switches to it (like Arc); ⌘Enter opens a copy.
     if (r.tab && !newTab) return switchTo(r.tab);
@@ -855,14 +862,6 @@
 
   input.addEventListener("keydown", e => {
     const k = e.key;
-    // 1–9 in an empty bar opens that favorite, 0 the ArcTab homepage (search-only tab / Ctrl+T overlay).
-    if (k === "0" && !IN_INCOGNITO && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off" && (searchOnly() || OVERLAY)) {
-      e.preventDefault(); resetBar(); showHome(); closeBar(); return;
-    }
-    if (/^[1-9]$/.test(k) && !typed && !keyword && !e.metaKey && !e.ctrlKey && !e.altKey && localStorage.favDigits !== "off") {
-      const tile = document.querySelector(`.fav-strip .fav[data-n="${k}"]`);
-      if (tile?.offsetParent) { e.preventDefault(); incognito ? openUrl(tile.href, true, true) : tile.click(); return; }
-    }
     if (document.body.classList.contains("navigating")) {
       if (k === "Escape") { window.stop(); stopNavigating(); } // stay here: call off the page load too
       e.preventDefault();
