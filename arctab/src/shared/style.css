@@ -282,7 +282,10 @@ body.navigating .cmd-ico { color: var(--accent); }
 .col > .card { position: absolute; left: 0; z-index: 1; } /* above neighbouring column strips, which a wide card overlaps */
 /* Extra drop room under the columns only while a section is being dragged. */
 body.dragging-section #sections { padding-bottom: 80px; } /* drop room below the last cards */
-.card.drag-through { pointer-events: none; }
+.card.drag-through { pointer-events: none; opacity: 0; } /* the drag image is already taken; the outline shows where it lands */
+/* Cards glide when others push them (resizing, a drop preview, collapsing). */
+.col > .card { transition: top .18s cubic-bezier(.2, .7, .3, 1); }
+body.resizing-card .col > .card { transition: none; }
 .card {
   min-width: 0;
   padding: 12px 10px;

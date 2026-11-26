@@ -249,6 +249,7 @@ function resizeGrip(card, id, body) {
     const left = card.getBoundingClientRect().left;
     const bodyTop = body.getBoundingClientRect().top;
     card.classList.add("resizing");
+    document.body.classList.add("resizing-card"); // others follow the grip directly, not with a lagging glide
     const move = ev => {
       const span = Math.max(1, Math.min(n - col, Math.round((ev.clientX - left + gap) / (colW + gap))));
       const height = Math.max(80, Math.round((ev.clientY - bodyTop) / 10) * 10);
@@ -260,6 +261,7 @@ function resizeGrip(card, id, body) {
     const up = () => {
       grip.removeEventListener("pointermove", move);
       card.classList.remove("resizing");
+      document.body.classList.remove("resizing-card");
       saveLayout();
       saveSnapshot();
     };
@@ -291,6 +293,7 @@ function cardShell(id, title, acts, body, extraClass = "") {
   });
   head.addEventListener("dragstart", e => {
     draggingCard = card;
+    dragGrabY = e.clientY - card.getBoundingClientRect().top;
     e.dataTransfer.setData(SECTION_TYPE, id);
     setTimeout(() => card.classList.add("drag-through")); // after the drag starts: let the pointer reach what's beneath
     e.dataTransfer.effectAllowed = "move";
@@ -302,6 +305,9 @@ function cardShell(id, title, acts, body, extraClass = "") {
     card.classList.remove("dragging", "drag-through");
     document.body.classList.remove("dragging-section");
     clearDropMarks();
+    dragSlot = null;
+    dragEdges = null;
+    arrange(); // cancelled: undo the preview
   });
   card.classList.toggle("collapsed", layout.collapsed.has(id));
   return card;

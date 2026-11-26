@@ -14,6 +14,10 @@ const state = { other: null, bar: null, fav: null, archive: null, pinned: new Se
 //              still decides the order within a column; this decides how the columns
 //              interleave, so a card can sit below a wide card from another column).
 //              Ids missing from it are placed row by row, as before it existed.
+//              Only used now to place cards that have no `pos` yet.
+//   pos:       { cardId: top px } where you put each card. Cards stay there; one that
+//              something has grown into is pushed down just enough (not saved), and goes
+//              back once there's room. Cards without one go below their column and get one.
 //   version:   2 = cols lists exactly the cards on the page. Before that every top-level
 //              folder showed automatically (plus v1's `widgets`/`hidden` lists).
 // Cards are bookmark folder ids or "widget:<id>". Nothing appears on its own: folders and
@@ -21,7 +25,7 @@ const state = { other: null, bar: null, fav: null, archive: null, pinned: new Se
 const LAYOUT_KEY = "layout";
 const LAYOUT_VERSION = 2;
 const MAX_COLS = 5;
-const layout = { columns: 3, cols: [[], [], []], collapsed: new Set(), open: new Set(), sizes: {}, order: [], version: 0, legacy: null, loaded: false };
+const layout = { columns: 3, cols: [[], [], []], collapsed: new Set(), open: new Set(), sizes: {}, order: [], pos: {}, version: 0, legacy: null, loaded: false };
 const openGroups = layout.open;
 
 async function loadSavedLayout() {
@@ -35,6 +39,7 @@ async function loadSavedLayout() {
     layout.version = saved.version || 1;
     layout.sizes = saved.sizes || {};
     layout.order = saved.order || [];
+    layout.pos = saved.pos || {};
     layout.legacy = { widgets: saved.widgets || [], hidden: saved.hidden || [] };
   } else {
     JSON.parse(localStorage.openGroups || "[]").forEach(id => layout.open.add(id)); // from v3
@@ -47,6 +52,7 @@ function saveLayout() {
     version: LAYOUT_VERSION, columns: layout.columns, cols: layout.cols,
     collapsed: [...layout.collapsed], open: [...layout.open], sizes: layout.sizes,
     order: layout.order.filter(onPage),
+    pos: Object.fromEntries(Object.entries(layout.pos).filter(([id]) => onPage(id))),
   } });
 }
 const saveOpenGroups = saveLayout;
@@ -80,17 +86,12 @@ function placeNewSections(sections, archiveId) {
 }
 const rows = f => (f.children || []).length;
 
-function moveSection(id, colIndex, beforeId) {
+// Dropped in column colIndex with its top at y (px from the top of the sections).
+function moveSection(id, colIndex, y) {
   document.body.classList.remove("dragging-section"); // the dragged node is re-rendered, so dragend may not fire
-  layout.order = placementOrder().filter(x => x !== id); // pin down the current interleaving first
   layout.cols.forEach(c => { const i = c.indexOf(id); if (i !== -1) c.splice(i, 1); });
-  const col = layout.cols[colIndex];
-  const i = beforeId ? col.indexOf(beforeId) : -1;
-  i === -1 ? col.push(id) : col.splice(i, 0, id);
-  // Before a card: takes its turn. At the end of a column: after everything already on the
-  // page, so it lands below anything covering that column (what the drop outline shows).
-  const oi = i === -1 ? -1 : layout.order.indexOf(beforeId);
-  oi === -1 ? layout.order.push(id) : layout.order.splice(oi, 0, id);
+  layout.cols[colIndex].push(id); // order within a column doesn't matter any more: pos does
+  layout.pos[id] = Math.max(0, Math.round(y));
   saveLayout();
   load();
 }
@@ -121,6 +122,7 @@ function placeCard(id) {
   const ai = col.indexOf(state.archive?.id);
   ai === -1 ? col.push(id) : col.splice(ai, 0, id); // keep Archive at the bottom
   layout.order.push(id);
+  delete layout.pos[id]; // goes below what's in its column, then keeps that spot
   layout.collapsed.delete(id);
   saveLayout();
   load();
@@ -253,72 +255,70 @@ function showFolderPicker() {
   filter.focus();
 }
 
-// A column accepts section drops: before the card whose vertical middle is below the
-// pointer, else at the end.
-function cardAfterPointer(col, y) {
-  return [...col.querySelectorAll(":scope > .card:not(.dragging)")]
-    .find(c => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; });
-}
-
-// While a card is dragged, a dashed outline shows exactly where it would land: its own
-// width (a wide widget covers several columns) and height, at the spot arrange() would
-// put it.
+// While a card is dragged, the page previews the drop: the other cards move as they
+// would, and a dashed outline shows where the card itself lands.
 let draggingCard = null;
+let dragGrabY = 0; // where in the card the pointer took hold (set on dragstart)
+let dragSlot = null; // the drop being previewed, so a re-layout mid-drag keeps the preview
+let dragEdges = null; // where a drop can line up: 0 and every other card's top and bottom (as of the drag's start)
 const dropGhost = el("div", { className: "drop-ghost" });
-
-function showDropGhost(colIndex, beforeCard) {
-  const { sec, n, gap, colW } = columnMetrics();
-  const lane = n === 1 ? 0 : Math.min(colIndex, n - 1);
-  const id = draggingCard?.dataset.id;
-  const span = n === 1 ? 1 : Math.max(1, Math.min(layout.sizes[id]?.span || 1, n - lane));
-  const left = lane * (colW + gap);
-  const width = span * colW + (span - 1) * gap;
-  const height = Math.max(48, draggingCard?.offsetHeight || 80);
-  let top = 0;
-  if (beforeCard) top = parseFloat(beforeCard.style.top) || 0;
-  else {
-    // Below everything already in the columns it would cover.
-    for (const c of sec.querySelectorAll(".col > .card:not(.dragging)")) {
-      const cl = (parseFloat(c.parentElement.style.left) || 0) + c.offsetLeft;
-      if (cl < left + width - 1 && cl + c.offsetWidth > left + 1) {
-        top = Math.max(top, (parseFloat(c.style.top) || 0) + c.offsetHeight + gap);
-      }
-    }
-  }
-  Object.assign(dropGhost.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
-  if (!dropGhost.isConnected) sec.append(dropGhost);
-}
 
 function columnNode(index) {
   return el("div", { className: "col", dataset: { col: index } });
 }
 
-// Which column a card drop lands in comes from the pointer's x position, not from the
-// element under it: a wide card belongs to its first column but covers others, and the
-// dragged card itself would otherwise swallow the pointer.
+// Where a drop would go: the column under the pointer (its x, not the element under it:
+// a wide card belongs to its first column but covers others), and the card's top where
+// the pointer would put it.
 function dropSlot(e) {
   const { sec, n, gap, colW } = columnMetrics();
-  const cols = [...sec.querySelectorAll(":scope > .col")];
+  const r = sec.getBoundingClientRect();
   let ci;
-  if (n === 1) ci = Math.max(0, cols.indexOf(e.target.closest?.(".col"))); // stacked: use the column under the pointer
-  else ci = Math.max(0, Math.min(n - 1, Math.floor((e.clientX - sec.getBoundingClientRect().left + gap / 2) / (colW + gap))));
-  return { ci, before: cols[ci] && cardAfterPointer(cols[ci], e.clientY) };
+  if (n === 1) ci = Math.max(0, [...sec.querySelectorAll(":scope > .col")].indexOf(e.target.closest?.(".col"))); // stacked
+  else ci = Math.max(0, Math.min(n - 1, Math.floor((e.clientX - r.left + gap / 2) / (colW + gap))));
+  // Snap to the nearest card edge, so the preview changes in clear steps instead of
+  // nudging the other cards on every pixel the pointer moves.
+  dragEdges ||= [0, ...[...sec.querySelectorAll(".col > .card:not(.dragging)")].flatMap(c => {
+    const top = parseFloat(c.style.top) || 0;
+    return [top, top + c.offsetHeight + gap];
+  })];
+  const raw = Math.max(0, e.clientY - r.top - dragGrabY);
+  const y = dragEdges.reduce((best, v) => (Math.abs(v - raw) < Math.abs(best - raw) ? v : best), 0);
+  return { ci, y };
+}
+
+// Preview a drop (or with no slot, put everything back).
+function previewDrop(slot) {
+  if (slot && dragSlot && slot.ci === dragSlot.ci && slot.y === dragSlot.y && dropGhost.isConnected) return dragSlot.spot; // nothing changed
+  dragSlot = slot;
+  const spot = slot && arrange({ id: draggingCard?.dataset.id, lane: slot.ci, y: slot.y });
+  if (!spot) { dropGhost.remove(); return null; }
+  Object.assign(dropGhost.style, { left: `${spot.left}px`, top: `${spot.top}px`, width: `${spot.width}px`, height: `${spot.height}px` });
+  if (!dropGhost.isConnected) $("#sections").append(dropGhost);
+  slot.spot = spot;
+  return spot;
 }
 
 const sectionsEl = $("#sections");
 sectionsEl.addEventListener("dragover", e => {
   if (!isSectionDrag(e)) return;
   e.preventDefault();
-  const { ci, before } = dropSlot(e);
-  showDropGhost(ci, before);
+  previewDrop(dropSlot(e));
 });
-sectionsEl.addEventListener("dragleave", e => { if (!sectionsEl.contains(e.relatedTarget)) clearDropMarks(); });
+sectionsEl.addEventListener("dragleave", e => {
+  if (sectionsEl.contains(e.relatedTarget)) return;
+  clearDropMarks();
+  previewDrop(null);
+  arrange();
+});
 sectionsEl.addEventListener("drop", e => {
   if (!isSectionDrag(e)) return;
   e.preventDefault();
+  const slot = dropSlot(e);
+  const spot = previewDrop(slot);
   clearDropMarks();
-  const { ci, before } = dropSlot(e);
-  moveSection(e.dataTransfer.getData(SECTION_TYPE), ci, before?.dataset.id);
+  dragSlot = dragEdges = null; // the dragged card is re-rendered, so its dragend may not fire
+  moveSection(e.dataTransfer.getData(SECTION_TYPE), slot.ci, spot ? spot.top : slot.y);
 });
 
 // ---------- column layout ----------
@@ -353,37 +353,81 @@ function placementOrder() {
   }
 }
 
-function arrange() {
+// Positions every card. Each sits at its saved top (layout.pos), unless a card above it in
+// the columns it covers has grown into it: then it goes just below that one (for now; its
+// saved top stays, so it moves back up when there's room). Cards with no saved top go below
+// everything in their column, in row-by-row order, and keep that spot.
+// drag: { id, lane, y } previews a drop: that card is placed there (its element isn't
+// moved; it's hidden while dragging) and the rest make room. Returns where it landed.
+function arrange(drag) {
   const { sec, n, W, gap, colW } = columnMetrics();
   const cols = [...sec.querySelectorAll(":scope > .col")];
-  if (!cols.length || !W) return;
+  if (!cols.length || !W) return null;
   const single = n === 1;
-  const queues = cols.map(c => [...c.querySelectorAll(":scope > .card")]);
-  const bottoms = new Array(n).fill(0);
   cols.forEach((c, i) => {
     c.style.left = `${single ? 0 : i * (colW + gap)}px`;
     c.style.width = `${single ? W : colW}px`;
   });
-  const place = (card, c) => {
-    const span = single ? 1 : Math.max(1, Math.min(layout.sizes[card.dataset.id]?.span || 1, n - c));
-    const lane = single ? 0 : c;
-    const top = Math.max(...bottoms.slice(lane, lane + span));
-    card.style.width = `${span * colW + (span - 1) * gap}px`;
-    card.style.top = `${top}px`;
-    const h = card.offsetHeight;
-    for (let k = lane; k < lane + span; k++) bottoms[k] = top + h + gap;
-  };
-  if (single) queues.forEach((q, c) => q.forEach(card => place(card, c)));
-  else {
-    const at = new Map(queues.flatMap((q, c) => q.map(card => [card.dataset.id, [card, c]])));
-    const done = new Set();
-    for (const id of placementOrder()) {
-      const hit = at.get(id);
-      if (hit) { place(...hit); done.add(id); }
+  const spanOf = (id, lane) => (single ? 1 : Math.max(1, Math.min(layout.sizes[id]?.span || 1, n - lane)));
+  const widthOf = span => span * colW + (span - 1) * gap;
+
+  // Narrow window: one stack, column after column.
+  if (single) {
+    let top = 0;
+    for (const c of cols) for (const card of c.querySelectorAll(":scope > .card")) {
+      card.style.width = `${W}px`;
+      card.style.top = `${top}px`;
+      top += card.offsetHeight + gap;
     }
-    queues.forEach((q, c) => q.forEach(card => { if (!done.has(card.dataset.id)) place(card, c); })); // not in layout.cols (shouldn't happen)
+    sec.style.height = `${Math.max(0, top - gap)}px`;
+    return null;
   }
-  sec.style.height = `${Math.max(0, ...bottoms.map(b => b - gap))}px`;
+
+  const items = [];
+  cols.forEach((c, lane) => c.querySelectorAll(":scope > .card").forEach(card => {
+    const id = card.dataset.id;
+    if (drag && id === drag.id) return; // placed at the drop spot instead
+    const span = spanOf(id, lane);
+    card.style.width = `${widthOf(span)}px`;
+    items.push({ card, id, lane, span, y: layout.pos[id] });
+  }));
+  for (const it of items) it.h = it.card.offsetHeight; // after the widths: text wraps differently
+  let dragged = null;
+  if (drag) {
+    dragged = { id: drag.id, lane: drag.lane, span: spanOf(drag.id, drag.lane), y: drag.y, h: Math.max(48, draggingCard?.offsetHeight || 80) };
+    items.push(dragged);
+  }
+
+  const covers = (a, b) => a.lane < b.lane + b.span && b.lane < a.lane + a.span;
+  const placed = [];
+  // Lowest top at or below y where it doesn't overlap anything placed so far.
+  const fit = it => {
+    let top = Math.max(0, it.y);
+    for (let moved = true; moved;) {
+      moved = false;
+      for (const p of placed) {
+        if (covers(it, p) && top < p.top + p.h + gap && top + it.h + gap > p.top) { top = p.top + p.h + gap; moved = true; }
+      }
+    }
+    return top;
+  };
+  // Saved spots first, top to bottom (a dropped card wins a tie), then the new ones.
+  const known = items.filter(it => it.y !== undefined)
+    .sort((a, b) => (a.y - b.y) || ((b === dragged) - (a === dragged)) || (a.lane - b.lane));
+  const rank = new Map(placementOrder().map((id, i) => [id, i]));
+  const fresh = items.filter(it => it.y === undefined).sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9));
+  for (const it of known) { it.top = fit(it); placed.push(it); }
+  let seeded = false;
+  for (const it of fresh) {
+    it.y = Math.max(0, ...placed.filter(p => covers(it, p)).map(p => p.top + p.h + gap));
+    it.top = fit(it);
+    placed.push(it);
+    if (!drag) { layout.pos[it.id] = it.top; seeded = true; }
+  }
+  for (const it of placed) if (it.card) it.card.style.top = `${it.top}px`;
+  sec.style.height = `${Math.max(0, ...placed.map(p => p.top + p.h))}px`;
+  if (seeded) saveLayout();
+  return dragged && { left: dragged.lane * (colW + gap), top: dragged.top, width: widthOf(dragged.span), height: dragged.h };
 }
 
 // Re-run when anything changes size: content loading, collapsing, the window.
@@ -391,7 +435,11 @@ let arrangeQueued = false;
 const queueArrange = () => {
   if (arrangeQueued) return;
   arrangeQueued = true;
-  requestAnimationFrame(() => { arrangeQueued = false; arrange(); });
+  requestAnimationFrame(() => {
+    arrangeQueued = false;
+    if (draggingCard && dragSlot) { const slot = dragSlot; dragSlot = null; previewDrop(slot); } // re-run, keeping the preview
+    else arrange();
+  });
 };
 const cardObserver = new ResizeObserver(queueArrange);
 function observeCards() {
