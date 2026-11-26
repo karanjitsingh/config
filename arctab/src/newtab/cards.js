@@ -209,7 +209,19 @@ function cardNode(f, opts = {}) {
   const card = cardShell(f.id, [el("h2", { textContent: f.title })], folderActs(f, { section: true, ...opts }), body);
   renderChildren(f.children, body, [card]);
   if (!f.children.length) body.append(el("div", { className: "empty", textContent: "Drop links here or press +" }));
+  // Resizable like widgets: wider for long titles, shorter (scrolls) for long folders.
+  sizeBody(f.id, body);
+  body.addEventListener("scroll", () => updateFade(body), { passive: true });
+  fadeObserver.observe(body);
+  card.append(resizeGrip(card, f.id, body));
   return card;
+}
+
+// Saved height for a resizable card's body (its column span is applied by arrange()).
+function sizeBody(id, body) {
+  const size = layout.sizes[id] || {};
+  body.style.height = size.height ? `${size.height}px` : "";
+  body.classList.toggle("sized", !!size.height);
 }
 
 // A widget card: same header behaviour as a section, body owned by widgets.js.
@@ -220,9 +232,7 @@ function widgetCard(def) {
   if (def.link) acts.append(actBtn("↗", "Open", () => window.open(def.link, "_blank")));
   acts.append(actBtn("✕", "Remove from page", () => removeCard(id, def.title)));
   const card = cardShell(id, [el("h2", { textContent: def.title }, ui.count)], acts, ui.body, "widget");
-  const size = layout.sizes[id] || {};
-  ui.body.style.height = size.height ? `${size.height}px` : "";
-  ui.body.classList.toggle("sized", !!size.height);
+  sizeBody(id, ui.body);
   if (def.resizable) card.append(resizeGrip(card, id, ui.body));
   return card;
 }

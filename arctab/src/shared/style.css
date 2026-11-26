@@ -845,7 +845,7 @@ dialog#add-dlg {
 @container (max-width: 200px) { .cr-ago { display: none; } }
 
 /* ---- resizable widgets ---- */
-.widget-body.sized { overflow-y: auto; overscroll-behavior: contain; }
+.widget-body.sized, .card > .body.sized { overflow-y: auto; overscroll-behavior: contain; }
 .widget-body > * { flex-shrink: 0; } /* rows keep their height and the body scrolls instead */
 .grip {
   position: absolute;
@@ -915,9 +915,9 @@ dialog#add-dlg {
 dialog menu .danger-primary { background: #2f8f46; border-color: #2f8f46; }
 
 /* Scroll hints on sized widgets (classes set by updateFade in widgets.js). */
-.widget-body.fade-bottom { -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
-.widget-body.fade-top { -webkit-mask-image: linear-gradient(transparent, #000 28px); mask-image: linear-gradient(transparent, #000 28px); }
-.widget-body.fade-top.fade-bottom {
+.widget-body.fade-bottom, .card > .body.fade-bottom { -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
+.widget-body.fade-top, .card > .body.fade-top { -webkit-mask-image: linear-gradient(transparent, #000 28px); mask-image: linear-gradient(transparent, #000 28px); }
+.widget-body.fade-top.fade-bottom, .card > .body.fade-top.fade-bottom {
   -webkit-mask-image: linear-gradient(transparent, #000 28px, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }
